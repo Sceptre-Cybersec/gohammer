@@ -21,6 +21,8 @@ type argStruct struct {
 	brute   bool
 	headers string
 	files   []string
+	mc      string
+	fc      string
 	timeout int
 }
 
@@ -31,7 +33,22 @@ type request struct {
 	body    io.Reader
 }
 
-func sendReq(positionsChan chan []string, reqTemplate request, timeout int) {
+func setDif(a, b []string) (diff []string) {
+	m := make(map[string]bool)
+
+	for _, item := range b {
+		m[item] = true
+	}
+
+	for _, item := range a {
+		if _, ok := m[item]; !ok {
+			diff = append(diff, item)
+		}
+	}
+	return
+}
+
+func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc []string) {
 	client := http.Client{
 		Timeout: time.Duration(timeout * int(time.Second)),
 	}
@@ -55,7 +72,18 @@ func sendReq(positionsChan chan []string, reqTemplate request, timeout int) {
 				}
 			}
 		}
-		client.Do(req)
+		resp, err := client.Do(req)
+
+		mcFound := false
+		for _, i := range mc {
+			if strconv.Itoa(resp.StatusCode) == i {
+				mcFound = true
+			}
+		}
+
+		if mcFound {
+			fmt.Println(positions)
+		}
 	}
 }
 
@@ -87,7 +115,6 @@ func procFiles(fnames []string, currString []string, reqChan chan []string) {
 
 	//send string to channel
 	if len(fnames) <= 0 {
-		fmt.Println(currString)
 		reqChan <- currString
 		return
 	}
@@ -110,10 +137,14 @@ func parseArgs(args []string) argStruct {
 	var progArgs argStruct
 	flag.StringVar(&(progArgs.url), "u", "http://127.0.0.1/", "The Url of the website to fuzz")
 	flag.IntVar(&(progArgs.threads), "t", 10, "The number of concurrect threads")
-	flag.StringVar(&(progArgs.headers), "H", "", "Comma seperated list of headers")
+	flag.StringVar(&(progArgs.headers), "H", "", "Comma seperated list of headers: 'Header1: value1,Header2: value2'")
 	flag.StringVar(&(progArgs.method), "method", "GET", "The type of http request: GET, or POST")
 	flag.BoolVar(&(progArgs.brute), "brute", true, "Whether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line.")
 	flag.IntVar(&(progArgs.timeout), "to", 10, "The timeout for each web request")
+
+	flag.StringVar(&(progArgs.mc), "mc", "200,204,301,302,307,401,403,405,500", "The http response codes to match")
+	flag.StringVar(&(progArgs.fc), "fc", "", "The http response codes to filter")
+
 	flag.Parse()
 	progArgs.files = flag.Args()
 	return progArgs
@@ -129,12 +160,13 @@ func main() {
 		method:  args.method,
 		headers: args.headers,
 	}
-
+	mc := setDif(strings.Split(args.mc, ","), strings.Split(args.fc, ","))
+	fmt.Println(mc)
 	for i := 0; i < args.threads; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sendReq(reqChan, reqTemplate, args.timeout)
+			sendReq(reqChan, reqTemplate, args.timeout, mc)
 		}()
 	}
 
