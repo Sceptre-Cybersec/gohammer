@@ -7,9 +7,10 @@ import (
 )
 
 var httpChan chan string = make(chan string)
+var urlChan chan string = make(chan string)
 
 func reqHandle(w http.ResponseWriter, r *http.Request) {
-	httpChan <- r.URL.String()
+	urlChan <- r.URL.String()
 	httpChan <- r.Host
 	httpChan <- r.Header["Content-Type"][0]
 	fmt.Fprint(w, "OK")
@@ -30,7 +31,7 @@ func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
 	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@@1@", headers: "Content-Type: @0@,Host: @0@@1@"}, 10, []string{"200"})
 	reqChan <- []string{"a", "b"}
-	urlResp := <-httpChan
+	urlResp := <-urlChan
 	if urlResp != "/ab" {
 		t.Fatal("URL Fuzzing Failed")
 	}
@@ -55,5 +56,27 @@ func TestProcReqTemplate(t *testing.T) {
 	}
 	if parsed.headers != "Content-Type: a,Host: ab" {
 		t.Fatal("Header Fuzzing Failed")
+	}
+}
+
+func TestBrute(t *testing.T) {
+	reqChan := make(chan []string)
+	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@@1@"}, 10, []string{"200"})
+
+	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@@1@"}, 10, []string{"200"})
+	procFiles([]string{"a.txt", "b.txt"}, nil, reqChan, false)
+	resp := []string{<-urlChan, <-urlChan}
+	test1 := false
+	test2 := false
+	// fmt.Println(resp)
+	for _, r := range resp {
+		if r == "/ac" {
+			test1 = true
+		} else if r == "/bd" {
+			test2 = true
+		}
+	}
+	if !(test1 && test2) {
+		t.Fatal("non brute force mode failed")
 	}
 }

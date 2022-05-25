@@ -82,14 +82,19 @@ func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc [
 		}
 
 		if mcFound {
-			fmt.Println(positions)
+			fmt.Printf("%d - %s", resp.StatusCode, positions)
 		}
 	}
 }
 
 func replacePosition(str string, positions []string) string {
 	r, _ := regexp.Compile(`@(\d+)@`)
-
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error: position number does not match number of files")
+			os.Exit(1)
+		}
+	}()
 	res := r.FindAllStringSubmatch(str, -1)
 	if len(res) > 0 {
 		for _, match := range res {
@@ -111,25 +116,63 @@ func procReqTemplate(req request, positions []string) request {
 	return parsedReq
 }
 
-func procFiles(fnames []string, currString []string, reqChan chan []string) {
+func procFiles(fnames []string, currString []string, reqChan chan []string, brute bool) {
+	if brute { //use recursive strategy
+		//send string to channel
+		if len(fnames) <= 0 {
+			reqChan <- currString
+			return
+		}
 
-	//send string to channel
-	if len(fnames) <= 0 {
-		reqChan <- currString
-		return
-	}
+		f, err := os.Open(fnames[0])
+		if err != nil {
+			fmt.Printf("Error opening %s", fnames[0])
+			os.Exit(1)
+		}
+		defer f.Close()
 
-	f, err := os.Open(fnames[0])
-	if err != nil {
-		fmt.Printf("Error opening %s", fnames[0])
-	}
-	defer f.Close()
+		scanner := bufio.NewScanner(f)
 
-	scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			newString := append(currString, scanner.Text())
+			procFiles(fnames[1:], newString, reqChan, brute)
+		}
+	} else { // read all files line by line
+		var files []*os.File
+		var scanners []*bufio.Scanner
+		for _, fname := range fnames { //open all files
+			f, err := os.Open(fname)
+			if err != nil {
+				fmt.Printf("Error opening %s", fname)
+				os.Exit(1)
+			}
+			files = append(files, f)
+			scanner := bufio.NewScanner(f)
+			scanner.Split(bufio.ScanLines)
+			scanners = append(scanners, scanner)
+		}
 
-	for scanner.Scan() {
-		newString := append(currString, scanner.Text())
-		procFiles(fnames[1:], newString, reqChan)
+		defer func(files []*os.File) { //close all files
+			for _, f := range files {
+				f.Close()
+			}
+		}(files)
+
+		EOF := false
+		for !EOF {
+			var currLine []string
+			for i := 0; i < len(scanners); i++ {
+				scanner := scanners[i]
+				scanner.Scan()
+				content := scanner.Text()
+				EOF = content == ""
+				currLine = append(currLine, content)
+			}
+			// send line off to requests
+			if !EOF {
+				reqChan <- currLine
+			}
+		}
 	}
 }
 
@@ -170,7 +213,7 @@ func main() {
 		}()
 	}
 
-	procFiles(args.files, nil, reqChan)
+	procFiles(args.files, nil, reqChan, args.brute)
 	close(reqChan)
 	wg.Wait()
 }
