@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 )
 
 var httpChan chan string = make(chan string)
@@ -25,6 +26,7 @@ func TestSetup(t *testing.T) {
 			fmt.Println("Setup Failed")
 		}
 	}()
+	time.Sleep(1 * time.Second)
 }
 
 func TestSendReq(t *testing.T) {
@@ -47,7 +49,7 @@ func TestSendReq(t *testing.T) {
 }
 
 func TestProcReqTemplate(t *testing.T) {
-	parsed := procReqTemplate(request{"GET@0@", "http://127.0.0.1/@0@@1@", "Content-Type: @0@,Host: @0@@1@", nil}, []string{"a", "b"})
+	parsed := procReqTemplate(request{"GET@0@", "http://127.0.0.1/@0@@1@", "Content-Type: @0@,Host: @0@@1@", ""}, []string{"a", "b"})
 	if parsed.method != "GETa" {
 		t.Fatal("Method Fuzzing Failed")
 	}
@@ -64,7 +66,7 @@ func TestBrute(t *testing.T) {
 	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@@1@"}, 10, []string{"200"})
 
 	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@@1@"}, 10, []string{"200"})
-	procFiles([]string{"a.txt", "b.txt"}, nil, reqChan, false)
+	procFiles([]string{"a.txt", "b.txt"}, nil, reqChan, false, []string{})
 	resp := []string{<-urlChan, <-urlChan}
 	test1 := false
 	test2 := false
@@ -79,4 +81,37 @@ func TestBrute(t *testing.T) {
 	if !(test1 && test2) {
 		t.Fatal("non brute force mode failed")
 	}
+}
+
+func TestExtensions(t *testing.T) {
+	reqChan := make(chan []string)
+	for i := 0; i < 4; i++ {
+		go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@_@1@"}, 10, []string{"200"})
+	}
+
+	procFiles([]string{"a.txt", "b.txt"}, nil, reqChan, false, []string{".txt", ".php"})
+	close(reqChan)
+	tests := []string{"/a.php_c.php", "/a.txt_c.txt", "/b.txt_d.txt", "/b.php_d.php"}
+	numPassed := 0
+	for i := 0; i < len(tests); i++ {
+		feedback := <-urlChan
+		passed := false
+		for _, test := range tests {
+			if test == feedback {
+				passed = true
+				numPassed++
+			}
+		}
+		if !passed {
+			t.Fatal("Extension Check Failed")
+		}
+	}
+}
+
+func TestPostData(t *testing.T) {
+	reqChan := make(chan []string)
+	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/fghdfg", body: "test=hello@0@"}, 10, []string{"200"})
+	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/fghdfg", body: "test=hello@0@"}, 10, []string{"200"})
+	procFiles([]string{"a.txt"}, nil, reqChan, false, []string{""})
+	fmt.Println(<-urlChan)
 }

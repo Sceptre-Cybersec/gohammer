@@ -2,9 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -23,6 +23,8 @@ type argStruct struct {
 	files   []string
 	mc      string
 	fc      string
+	e       string
+	data    string
 	timeout int
 }
 
@@ -30,7 +32,7 @@ type request struct {
 	method  string
 	url     string
 	headers string
-	body    io.Reader
+	body    string
 }
 
 func setDif(a, b []string) (diff []string) {
@@ -55,7 +57,7 @@ func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc [
 	// while receiving input on channel
 	for positions, ok := <-positionsChan; ok; positions, ok = <-positionsChan {
 		parsedReq := procReqTemplate(reqTemplate, positions)
-		req, err := http.NewRequest(parsedReq.method, parsedReq.url, parsedReq.body)
+		req, err := http.NewRequest(parsedReq.method, parsedReq.url, bytes.NewBuffer([]byte(parsedReq.body)))
 		if err != nil {
 			fmt.Println("Error making request")
 			os.Exit(1)
@@ -74,6 +76,11 @@ func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc [
 		}
 		resp, err := client.Do(req)
 
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
 		mcFound := false
 		for _, i := range mc {
 			if strconv.Itoa(resp.StatusCode) == i {
@@ -82,7 +89,7 @@ func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc [
 		}
 
 		if mcFound {
-			fmt.Printf("%d - %s", resp.StatusCode, positions)
+			fmt.Printf("%d - %s\n", resp.StatusCode, positions)
 		}
 	}
 }
@@ -113,14 +120,29 @@ func procReqTemplate(req request, positions []string) request {
 	parsedReq.url = replacePosition(parsedReq.url, positions)
 	parsedReq.method = replacePosition(parsedReq.method, positions)
 	parsedReq.headers = replacePosition(parsedReq.headers, positions)
+	parsedReq.body = replacePosition(parsedReq.body, positions)
 	return parsedReq
 }
 
-func procFiles(fnames []string, currString []string, reqChan chan []string, brute bool) {
+func procExtensions(currString []string, extensions []string, reqChan chan []string) {
+	if len(extensions) <= 0 {
+		reqChan <- currString
+	}
+	//append extensions to all fuzzing positions
+	for _, ext := range extensions {
+		var extCurrString []string
+		for _, position := range currString {
+			extCurrString = append(extCurrString, position+ext)
+		}
+		reqChan <- extCurrString
+	}
+}
+
+func procFiles(fnames []string, currString []string, reqChan chan []string, brute bool, extensions []string) {
 	if brute { //use recursive strategy
 		//send string to channel
 		if len(fnames) <= 0 {
-			reqChan <- currString
+			procExtensions(currString, extensions, reqChan)
 			return
 		}
 
@@ -135,7 +157,7 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 
 		for scanner.Scan() {
 			newString := append(currString, scanner.Text())
-			procFiles(fnames[1:], newString, reqChan, brute)
+			procFiles(fnames[1:], newString, reqChan, brute, extensions)
 		}
 	} else { // read all files line by line
 		var files []*os.File
@@ -170,7 +192,7 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 			}
 			// send line off to requests
 			if !EOF {
-				reqChan <- currLine
+				procExtensions(currLine, extensions, reqChan)
 			}
 		}
 	}
@@ -179,15 +201,15 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 func parseArgs(args []string) argStruct {
 	var progArgs argStruct
 	flag.StringVar(&(progArgs.url), "u", "http://127.0.0.1/", "The Url of the website to fuzz")
+	flag.StringVar(&(progArgs.data), "d", "", "The data to provide in the request (Usually post)")
 	flag.IntVar(&(progArgs.threads), "t", 10, "The number of concurrect threads")
 	flag.StringVar(&(progArgs.headers), "H", "", "Comma seperated list of headers: 'Header1: value1,Header2: value2'")
 	flag.StringVar(&(progArgs.method), "method", "GET", "The type of http request: GET, or POST")
 	flag.BoolVar(&(progArgs.brute), "brute", true, "Whether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line.")
 	flag.IntVar(&(progArgs.timeout), "to", 10, "The timeout for each web request")
-
 	flag.StringVar(&(progArgs.mc), "mc", "200,204,301,302,307,401,403,405,500", "The http response codes to match")
 	flag.StringVar(&(progArgs.fc), "fc", "", "The http response codes to filter")
-
+	flag.StringVar(&(progArgs.e), "e", "", "The comma separated file extensions to fuzz with. Example: '.txt,.php,.html'")
 	flag.Parse()
 	progArgs.files = flag.Args()
 	return progArgs
@@ -202,9 +224,10 @@ func main() {
 		url:     args.url,
 		method:  args.method,
 		headers: args.headers,
+		body:    args.data,
 	}
 	mc := setDif(strings.Split(args.mc, ","), strings.Split(args.fc, ","))
-	fmt.Println(mc)
+
 	for i := 0; i < args.threads; i++ {
 		wg.Add(1)
 		go func() {
@@ -213,7 +236,8 @@ func main() {
 		}()
 	}
 
-	procFiles(args.files, nil, reqChan, args.brute)
+	extensions := strings.Split(args.e, ",")
+	procFiles(args.files, nil, reqChan, args.brute, extensions)
 	close(reqChan)
 	wg.Wait()
 }
