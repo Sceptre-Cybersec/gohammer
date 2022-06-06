@@ -15,17 +15,20 @@ import (
 )
 
 type argStruct struct {
-	url     string
-	threads int
-	method  string
-	brute   bool
-	headers string
-	files   []string
-	mc      string
-	fc      string
-	e       string
-	data    string
-	timeout int
+	url              string
+	threads          int
+	method           string
+	brute            bool
+	headers          string
+	files            []string
+	mc               string
+	fc               string
+	timeout          int
+	e                string
+	data             string
+	depth            int
+	recursePosition  int
+	recurseDelimeter string
 }
 
 type request struct {
@@ -34,6 +37,9 @@ type request struct {
 	headers string
 	body    string
 }
+
+var frontierQ []string = []string{""}
+var frontierLock sync.Mutex
 
 func setDif(a, b []string) (diff []string) {
 	m := make(map[string]bool)
@@ -50,13 +56,39 @@ func setDif(a, b []string) (diff []string) {
 	return
 }
 
-func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc []string) {
+func isRecurse(resp *http.Response, err error) (bool, int) {
+	codes := []int{301, 302}
+	recurse := false
+	var code int
+	if err != nil {
+		if strings.HasSuffix(err.Error(), "response missing Location header") {
+			rx, _ := regexp.Compile(`(\d+) response missing Location header`)
+			res := rx.FindAllStringSubmatch(err.Error(), -1)
+			codeString := res[0][1]
+			code, err = strconv.Atoi(codeString)
+			if err != nil {
+				fmt.Printf("Error converting response code %s to integer\n", codeString)
+				os.Exit(1)
+			}
+		}
+	} else {
+		code = resp.StatusCode
+	}
+	for _, c := range codes {
+		if c == code {
+			recurse = true
+		}
+	}
+	return recurse, code
+}
+
+func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc []string, recursePosition int, recurseDelim string) {
 	client := http.Client{
 		Timeout: time.Duration(timeout * int(time.Second)),
 	}
 	// while receiving input on channel
 	for positions, ok := <-positionsChan; ok; positions, ok = <-positionsChan {
-		parsedReq := procReqTemplate(reqTemplate, positions)
+		parsedReq := procReqTemplate(reqTemplate, positions, recursePosition)
 		req, err := http.NewRequest(parsedReq.method, parsedReq.url, bytes.NewBuffer([]byte(parsedReq.body)))
 		if err != nil {
 			fmt.Println("Error making request")
@@ -76,25 +108,34 @@ func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc [
 		}
 		resp, err := client.Do(req)
 
-		if err != nil {
+		recurse, code := isRecurse(resp, err)
+		if code == 0 && err != nil {
 			fmt.Println(err)
 			continue
 		}
 
 		mcFound := false
 		for _, i := range mc {
-			if strconv.Itoa(resp.StatusCode) == i {
+			if strconv.Itoa(code) == i {
 				mcFound = true
 			}
 		}
 
 		if mcFound {
-			fmt.Printf("%d - %s\n", resp.StatusCode, positions)
+			displayPos := make([]string, len(positions))
+			copy(displayPos, positions)
+			displayPos[recursePosition] = frontierQ[0] + positions[recursePosition]
+			fmt.Printf("%d - %s\n", code, displayPos)
+		}
+		if recurse {
+			frontierLock.Lock()
+			frontierQ = append(frontierQ, frontierQ[0]+positions[recursePosition]+recurseDelim)
+			frontierLock.Unlock()
 		}
 	}
 }
 
-func replacePosition(str string, positions []string) string {
+func replacePosition(str string, positions []string, recursePos int) string {
 	r, _ := regexp.Compile(`@(\d+)@`)
 	defer func() {
 		if r := recover(); r != nil {
@@ -103,24 +144,27 @@ func replacePosition(str string, positions []string) string {
 		}
 	}()
 	res := r.FindAllStringSubmatch(str, -1)
-	if len(res) > 0 {
-		for _, match := range res {
-			posIdx, err := strconv.Atoi(match[1])
-			if err != nil {
-				fmt.Println("Error converting position index to string")
-			}
-			str = strings.Replace(str, match[0], positions[posIdx], -1)
+	for _, match := range res {
+		posIdx, err := strconv.Atoi(match[1])
+		if err != nil {
+			fmt.Println("Error converting position index to integer")
+			os.Exit(1)
 		}
+		baseStr := ""
+		if posIdx == recursePos {
+			baseStr = frontierQ[0]
+		}
+		str = strings.Replace(str, match[0], baseStr+positions[posIdx], -1)
 	}
 	return str
 }
 
-func procReqTemplate(req request, positions []string) request {
+func procReqTemplate(req request, positions []string, recursePos int) request {
 	parsedReq := req
-	parsedReq.url = replacePosition(parsedReq.url, positions)
-	parsedReq.method = replacePosition(parsedReq.method, positions)
-	parsedReq.headers = replacePosition(parsedReq.headers, positions)
-	parsedReq.body = replacePosition(parsedReq.body, positions)
+	parsedReq.url = replacePosition(parsedReq.url, positions, recursePos)
+	parsedReq.method = replacePosition(parsedReq.method, positions, recursePos)
+	parsedReq.headers = replacePosition(parsedReq.headers, positions, recursePos)
+	parsedReq.body = replacePosition(parsedReq.body, positions, recursePos)
 	return parsedReq
 }
 
@@ -190,11 +234,32 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 				EOF = content == ""
 				currLine = append(currLine, content)
 			}
-			// send line off to requests
+			// send line to requests
 			if !EOF {
 				procExtensions(currLine, extensions, reqChan)
 			}
 		}
+	}
+}
+
+func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTemplate request, mc []string, depth int, recursePos int, recurseDelim string, extensions []string) {
+	for i := 0; i <= depth && len(frontierQ) > 0; i++ { // iteratively search web directories
+		reqChan := make(chan []string)
+		var wg sync.WaitGroup
+		for i := 0; i < threads; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sendReq(reqChan, reqTemplate, timeout, mc, recursePos, recurseDelim)
+			}()
+		}
+
+		procFiles(files, nil, reqChan, brute, extensions)
+		close(reqChan)
+		wg.Wait()
+		frontierLock.Lock()
+		frontierQ = frontierQ[1:]
+		frontierLock.Unlock()
 	}
 }
 
@@ -203,6 +268,9 @@ func parseArgs(args []string) argStruct {
 	flag.StringVar(&(progArgs.url), "u", "http://127.0.0.1/", "The Url of the website to fuzz")
 	flag.StringVar(&(progArgs.data), "d", "", "The data to provide in the request (Usually post)")
 	flag.IntVar(&(progArgs.threads), "t", 10, "The number of concurrect threads")
+	flag.IntVar(&(progArgs.depth), "rd", 0, "The recursion depth of the search")
+	flag.IntVar(&(progArgs.recursePosition), "rp", 0, "The position to recurse on")
+	flag.StringVar(&(progArgs.recurseDelimeter), "rdl", "/", "The string to append to the base string when recursing")
 	flag.StringVar(&(progArgs.headers), "H", "", "Comma seperated list of headers: 'Header1: value1,Header2: value2'")
 	flag.StringVar(&(progArgs.method), "method", "GET", "The type of http request: GET, or POST")
 	flag.BoolVar(&(progArgs.brute), "brute", true, "Whether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line.")
@@ -216,8 +284,7 @@ func parseArgs(args []string) argStruct {
 }
 
 func main() {
-	var wg sync.WaitGroup
-	reqChan := make(chan []string)
+
 	args := parseArgs(os.Args)
 
 	reqTemplate := request{
@@ -227,17 +294,6 @@ func main() {
 		body:    args.data,
 	}
 	mc := setDif(strings.Split(args.mc, ","), strings.Split(args.fc, ","))
-
-	for i := 0; i < args.threads; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			sendReq(reqChan, reqTemplate, args.timeout, mc)
-		}()
-	}
-
 	extensions := strings.Split(args.e, ",")
-	procFiles(args.files, nil, reqChan, args.brute, extensions)
-	close(reqChan)
-	wg.Wait()
+	recurseFuzz(args.threads, args.timeout, args.files, args.brute, reqTemplate, mc, args.depth, args.recursePosition, args.recurseDelimeter, extensions)
 }

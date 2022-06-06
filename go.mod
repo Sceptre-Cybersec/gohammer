@@ -1,3 +1,3 @@
 module github.com/wadeking98/gohammer
 
-go 1.17
+go 1.18
