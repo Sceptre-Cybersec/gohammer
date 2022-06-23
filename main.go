@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -40,6 +41,11 @@ type request struct {
 
 var frontierQ []string = []string{""}
 var frontierLock sync.Mutex
+
+var counter int = 0
+var counterLock sync.Mutex
+
+var totalJobs int
 
 func setDif(a, b []string) (diff []string) {
 	m := make(map[string]bool)
@@ -108,6 +114,10 @@ func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc [
 		}
 		resp, err := client.Do(req)
 
+		counterLock.Lock()
+		counter++
+		counterLock.Unlock()
+
 		recurse, code := isRecurse(resp, err)
 		if code == 0 && err != nil {
 			fmt.Println(err)
@@ -125,7 +135,8 @@ func sendReq(positionsChan chan []string, reqTemplate request, timeout int, mc [
 			displayPos := make([]string, len(positions))
 			copy(displayPos, positions)
 			displayPos[recursePosition] = frontierQ[0] + positions[recursePosition]
-			fmt.Printf("%d - %s\n", code, displayPos)
+			fmt.Printf("\r%d - %s                                 \n", code, displayPos)
+			printProgress()
 		}
 		if recurse {
 			frontierLock.Lock()
@@ -242,6 +253,46 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 	}
 }
 
+func getNumJobs(fnames []string, brute bool, extensions []string) int {
+	var files []*bufio.Scanner
+	for _, fname := range fnames {
+		f, err := os.Open(fname)
+		if err != nil {
+			fmt.Printf("Error opening %s", fnames[0])
+			os.Exit(1)
+		}
+		files = append(files, bufio.NewScanner(f))
+		defer f.Close()
+	}
+	// there will always be at least one file
+	numJobs := getFileLen(files[0])
+	for _, f := range files[1:] {
+		len := getFileLen(f)
+		if len == 0 {
+			fmt.Println("Error: empty file")
+			os.Exit(1)
+		}
+		if brute {
+			numJobs *= len
+		} else {
+			numJobs = int(math.Min(float64(numJobs), float64(len)))
+		}
+	}
+	// extensions will always have at least one element in it (the empty extension: '')
+	numJobs *= len(extensions)
+
+	return numJobs
+}
+
+func getFileLen(r *bufio.Scanner) int {
+	// return the length of the file
+	count := 0
+	for r.Scan() {
+		count++
+	}
+	return count
+}
+
 func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTemplate request, mc []string, depth int, recursePos int, recurseDelim string, extensions []string) {
 	for i := 0; i <= depth && len(frontierQ) > 0; i++ { // iteratively search web directories
 		reqChan := make(chan []string)
@@ -261,6 +312,17 @@ func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTempla
 		frontierQ = frontierQ[1:]
 		frontierLock.Unlock()
 	}
+}
+
+func printProgressLoop() {
+	for {
+		time.Sleep(1 * time.Second)
+		printProgress()
+	}
+}
+
+func printProgress() {
+	fmt.Printf("\rProgress: %d/%d", counter, totalJobs)
 }
 
 func parseArgs(args []string) argStruct {
@@ -284,6 +346,9 @@ func parseArgs(args []string) argStruct {
 }
 
 func main() {
+	fmt.Println("+-------------------------------------+")
+	fmt.Println("|GOHAMMER - A Web Fuzzer Written in GO|")
+	fmt.Println("+-------------------------------------+")
 
 	args := parseArgs(os.Args)
 
@@ -295,5 +360,10 @@ func main() {
 	}
 	mc := setDif(strings.Split(args.mc, ","), strings.Split(args.fc, ","))
 	extensions := strings.Split(args.e, ",")
+	extensions = append(extensions, "") //add blank extensions
+	totalJobs = getNumJobs(args.files, args.brute, extensions)
+	go printProgressLoop()
 	recurseFuzz(args.threads, args.timeout, args.files, args.brute, reqTemplate, mc, args.depth, args.recursePosition, args.recurseDelimeter, extensions)
+	printProgress()
+	fmt.Println()
 }

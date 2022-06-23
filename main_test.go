@@ -145,3 +145,11 @@ func TestRecursion(t *testing.T) {
 		t.Fatalf("recursion failed %s %s %s\n", url1, url2, url3)
 	}
 }
+
+func TestNumJobs(t *testing.T) {
+	numJobsBrute := getNumJobs([]string{"./a.txt", "./b.txt", "./c.txt"}, true, []string{"", ".txt"})
+	numJobs := getNumJobs([]string{"./a.txt", "./b.txt", "./c.txt"}, true, []string{"", ".txt"})
+	if numJobs != 4 && numJobsBrute != 16 {
+		t.Fatal("Incorrect number of jobs")
+	}
+}
