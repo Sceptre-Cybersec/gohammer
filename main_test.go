@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	. "gohammer/utils"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -43,7 +44,7 @@ func TestSetup(t *testing.T) {
 
 func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
-	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@@1@", headers: "Content-Type: @0@,Host: @0@@1@"}, 10, []string{"200"}, 0, "")
+	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@", Headers: "Content-Type: @0@,Host: @0@@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "")
 	reqChan <- []string{"a", "b"}
 	close(reqChan)
 	urlResp := <-urlChan
@@ -62,24 +63,24 @@ func TestSendReq(t *testing.T) {
 }
 
 func TestProcReqTemplate(t *testing.T) {
-	parsed := procReqTemplate(request{"GET@0@", "http://127.0.0.1/@0@@1@", "Content-Type: @0@,Host: @0@@1@", ""}, []string{"a", "b"}, 0)
-	if parsed.method != "GETa" {
+	parsed := ProcReqTemplate(Request{"GET@0@", "http://127.0.0.1/@0@@1@", "Content-Type: @0@,Host: @0@@1@", ""}, []string{"a", "b"}, 0)
+	if parsed.Method != "GETa" {
 		t.Fatal("Method Fuzzing Failed")
 	}
-	if parsed.url != "http://127.0.0.1/ab" {
+	if parsed.Url != "http://127.0.0.1/ab" {
 		t.Fatal("URL Fuzzing Failed")
 	}
-	if parsed.headers != "Content-Type: a,Host: ab" {
+	if parsed.Headers != "Content-Type: a,Host: ab" {
 		t.Fatal("Header Fuzzing Failed")
 	}
 }
 
 func TestBrute(t *testing.T) {
 	reqChan := make(chan []string)
-	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@@1@"}, 10, []string{"200"}, 0, "")
+	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "")
 
-	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@@1@"}, 10, []string{"200"}, 0, "")
-	procFiles([]string{"a.txt", "b.txt"}, nil, reqChan, false, []string{})
+	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "")
+	procFiles([]string{"tests/a.txt", "tests/b.txt"}, nil, reqChan, false, []string{})
 	close(reqChan)
 	resp := []string{<-urlChan, <-urlChan}
 	test1 := false
@@ -100,10 +101,10 @@ func TestBrute(t *testing.T) {
 func TestExtensions(t *testing.T) {
 	reqChan := make(chan []string)
 	for i := 0; i < 4; i++ {
-		go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/@0@_@1@"}, 10, []string{"200"}, 0, "")
+		go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@_@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "")
 	}
 
-	procFiles([]string{"a.txt", "b.txt"}, nil, reqChan, false, []string{".txt", ".php"})
+	procFiles([]string{"tests/a.txt", "tests/b.txt"}, nil, reqChan, false, []string{".txt", ".php"})
 	close(reqChan)
 	tests := []string{"/a.php_c.php", "/a.txt_c.txt", "/b.txt_d.txt", "/b.php_d.php"}
 	numPassed := 0
@@ -124,8 +125,8 @@ func TestExtensions(t *testing.T) {
 
 func TestPostData(t *testing.T) {
 	reqChan := make(chan []string)
-	go sendReq(reqChan, request{method: "POST", url: "http://127.0.0.1:8080/data", body: "test=hello@0@"}, 10, []string{"200"}, 0, "")
-	procFiles([]string{"oneChar.txt"}, nil, reqChan, false, []string{""})
+	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/data", Body: "test=hello@0@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "")
+	procFiles([]string{"tests/oneChar.txt"}, nil, reqChan, false, []string{""})
 	close(reqChan)
 	resp := <-bodyChan
 	<-urlChan
@@ -136,7 +137,7 @@ func TestPostData(t *testing.T) {
 }
 
 func TestRecursion(t *testing.T) {
-	go recurseFuzz(1, 5, []string{"oneChar.txt"}, false, request{method: "GET", url: "http://127.0.0.1:8080/recurse/@0@"}, []string{"200", "301"}, 2, 0, "/", nil)
+	go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{Method: "GET", Url: "http://127.0.0.1:8080/recurse/@0@"}, "", TcpAddress{}, []string{"200", "301"}, 2, 0, "/", nil)
 	url1 := <-urlChan
 	url2 := <-urlChan
 	url3 := <-urlChan
@@ -147,9 +148,62 @@ func TestRecursion(t *testing.T) {
 }
 
 func TestNumJobs(t *testing.T) {
-	numJobsBrute := getNumJobs([]string{"./a.txt", "./b.txt", "./c.txt"}, true, []string{"", ".txt"})
-	numJobs := getNumJobs([]string{"./a.txt", "./b.txt", "./c.txt"}, true, []string{"", ".txt"})
+	numJobsBrute := GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
+	numJobs := GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
 	if numJobs != 4 && numJobsBrute != 16 {
 		t.Fatal("Incorrect number of jobs")
+	}
+}
+
+func TestUrlToTcp(t *testing.T) {
+	address := UrlToTcpAddress("https://regex101.com/")
+	if address.Port != 443 || !address.Ssl || address.Address != "regex101.com" {
+		t.Fatal("Incorrect URL Parsing")
+	}
+
+	address = UrlToTcpAddress("https://127.0.0.1:8080/")
+	if address.Port != 8080 || !address.Ssl || address.Address != "127.0.0.1" {
+		t.Fatal("Incorrect URL Parsing")
+	}
+
+	address = UrlToTcpAddress("http://0.0.0.0:8080/")
+	if address.Port != 8080 || address.Ssl || address.Address != "0.0.0.0" {
+		t.Fatal("Incorrect URL Parsing")
+	}
+
+	address = UrlToTcpAddress("http://localhost/")
+	if address.Port != 80 || address.Ssl || address.Address != "localhost" {
+		t.Fatal("Incorrect URL Parsing")
+	}
+}
+
+func TestReqFile(t *testing.T) {
+	fileBytes, err := ioutil.ReadFile("tests/req.txt")
+	if err != nil {
+		fmt.Println("Error: couldn't open file")
+	}
+	reqFileContent := string(fileBytes)
+	//reset frontier
+	FrontierQ = []string{""}
+	go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, []string{"200", "301"}, 2, 0, "/", nil)
+	url := <-urlChan
+	fmt.Println(url)
+	if url != "/tcp/c" {
+		t.Fatal("Tcp Socket Request Failed")
+	}
+
+	fileBytes, err = ioutil.ReadFile("tests/reqPost.txt")
+	if err != nil {
+		fmt.Println("Error: couldn't open file")
+	}
+	reqFileContent = RemoveTrailingNewline(string(fileBytes))
+	go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, []string{"200", "301"}, 2, 0, "/", nil)
+	body := <-bodyChan
+	url = <-urlChan
+	if url != "/data/c" {
+		t.Fatal("Tcp Socket Post Request Failed")
+	}
+	if body != "test=helloc" {
+		t.Fatal("invalid post data")
 	}
 }
