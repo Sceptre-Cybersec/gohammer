@@ -1,0 +1,16 @@
+GET /recurse/@0@ HTTP/1.1
+Host: localhost:8080
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+Accept-Language: en-CA,en-US;q=0.7,en;q=0.3
+Accept-Encoding: gzip, deflate
+Connection: close
+Cookie: csrftoken=4S8b2nFcnCBSOgaDpilZzqqFOoX1hmOIhdEdEPDp7XXpt1KPiqWJ09OQ4nHhROlC; _sp_id.1fff=baac8734-646a-457f-a9e5-ca39f87a42af.1653941292.3.1654620108.1654042966.34733fa1-03af-48d1-a687-a7df3a82aaf0
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: none
+Sec-Fetch-User: ?1
+DNT: 1
+Sec-GPC: 1
+

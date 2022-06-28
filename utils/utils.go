@@ -91,8 +91,9 @@ func PrintProgress() {
 	fmt.Printf("\rProgress: %d/%d - %d/s - Errors: %d    \t", Counter, TotalJobs, avg, ErrorCounter)
 }
 
-func CheckCodeFound(code string, positions []string, recursePosition int, mc []string) {
+func CheckCodeFound(codeNumber int, positions []string, recursePosition int, mc []string) {
 	mcFound := false
+	code := strconv.Itoa(codeNumber)
 	for _, i := range mc {
 		if code == i {
 			mcFound = true
@@ -210,9 +211,7 @@ func ProcTcpReqTemplate(req string, positions []string, recursePos int) string {
 	return parsedReq
 }
 
-func IsRecurse(resp *http.Response, err error) (bool, int) {
-	codes := []int{301, 302}
-	recurse := false
+func IsRecurseHttp(resp *http.Response, err error) (bool, int) {
 	var code int
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "response missing Location header") {
@@ -222,18 +221,37 @@ func IsRecurse(resp *http.Response, err error) (bool, int) {
 			code, err = strconv.Atoi(codeString)
 			if err != nil {
 				fmt.Printf("Error converting response code %s to integer\n", codeString)
-				os.Exit(1)
+				return false, 0
 			}
 		}
 	} else {
 		code = resp.StatusCode
 	}
+	recurse := isRecurse(code)
+	return recurse, code
+}
+
+func IsRecurseTcp(resp string) (bool, int) {
+	codeString := GetTcpRespCode(resp)
+	code, err := strconv.Atoi(codeString)
+	if err != nil {
+		fmt.Printf("Error converting response code %s to integer\n", codeString)
+		return false, 0
+	}
+	recurse := isRecurse(code)
+	return recurse, code
+}
+
+func isRecurse(code int) bool {
+	codes := []int{301, 302}
+	ret := false
 	for _, c := range codes {
 		if c == code {
-			recurse = true
+			ret = true
+			break
 		}
 	}
-	return recurse, code
+	return ret
 }
 
 func SetDif(a, b []string) (diff []string) {

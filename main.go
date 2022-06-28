@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,20 +33,30 @@ type argStruct struct {
 	depth            int
 	recursePosition  int
 	recurseDelimeter string
+	retry            int
 }
 
-func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, timeout int, mc []string, recursePosition int, recurseDelim string) {
+func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, timeout int, mc []string, recursePosition int, recurseDelim string) bool {
+	// send request using raw tcp or tls, returns false if request failed
 	var connClient io.ReadWriter
 	if tcpConn.Ssl {
 		conf := &tls.Config{
 			InsecureSkipVerify: true,
 		}
-		connClientTls, _ := tls.Dial("tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port), conf)
+		d := net.Dialer{Timeout: time.Duration(timeout) * time.Second}
+		connClientTls, err := tls.DialWithDialer(&d, "tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port), conf)
+		if err != nil {
+			ErrorCounterInc()
+			return false
+		}
 		defer connClientTls.Close()
 		connClient = connClientTls
 	} else {
-		d := net.Dialer{Timeout: time.Duration(timeout)}
-		connClientTcp, _ := d.Dial("tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port))
+		connClientTcp, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port), time.Duration(timeout*int(time.Second)))
+		if err != nil {
+			ErrorCounterInc()
+			return false
+		}
 		defer connClientTcp.Close()
 		connClient = connClientTcp
 	}
@@ -65,13 +74,20 @@ func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, 
 		}
 		message += messageLine
 	}
-	CounterInc()
-	code := GetTcpRespCode(message)
 
-	CheckCodeFound(code, positions, recursePosition, mc)
+	recurse, code := IsRecurseTcp(message)
+	// not an error created by 301 without Location header
+	if code == 0 {
+		ErrorCounterInc()
+		return false
+	}
+
+	applyRecurse(code, recurse, positions, recursePosition, recurseDelim, mc)
+	return true
 }
 
-func sendReqHttp(positions []string, reqTemplate Request, timeout int, mc []string, recursePosition int, recurseDelim string) {
+func sendReqHttp(positions []string, reqTemplate Request, timeout int, mc []string, recursePosition int, recurseDelim string) bool {
+	// send request using http or https, returns false if request failed
 	client := http.Client{
 		Timeout: time.Duration(timeout * int(time.Second)),
 	}
@@ -94,16 +110,23 @@ func sendReqHttp(positions []string, reqTemplate Request, timeout int, mc []stri
 		}
 	}
 	resp, err := client.Do(req)
-	CounterInc()
 
-	recurse, code := IsRecurse(resp, err)
+	recurse, code := IsRecurseHttp(resp, err)
 	// not an error created by 301 without Location header
 	if code == 0 && err != nil {
 		ErrorCounterInc()
-		return
+		return false
 	}
 
-	CheckCodeFound(strconv.Itoa(code), positions, recursePosition, mc)
+	applyRecurse(code, recurse, positions, recursePosition, recurseDelim, mc)
+
+	return true
+}
+
+func applyRecurse(code int, recurse bool, positions []string, recursePosition int, recurseDelim string, mc []string) {
+	CounterInc()
+
+	CheckCodeFound(code, positions, recursePosition, mc)
 	if recurse {
 		FrontierLock.Lock()
 		FrontierQ = append(FrontierQ, FrontierQ[0]+positions[recursePosition]+recurseDelim)
@@ -111,15 +134,20 @@ func sendReqHttp(positions []string, reqTemplate Request, timeout int, mc []stri
 	}
 }
 
-func sendReq(positionsChan chan []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, timeout int, mc []string, recursePosition int, recurseDelim string) {
+func sendReq(positionsChan chan []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, timeout int, mc []string, recursePosition int, recurseDelim string, retry int) {
 
 	// while receiving input on channel
 	for positions, ok := <-positionsChan; ok; positions, ok = <-positionsChan {
-		//request file is not set, use standard http mode
-		if reqFileContent == "" {
-			sendReqHttp(positions, reqTemplate, timeout, mc, recursePosition, recurseDelim)
-		} else { //send reqFile over tcp socket
-			sendReqTcp(positions, reqTemplate, reqFileContent, tcpConn, timeout, mc, recursePosition, recurseDelim)
+		//retry request x times unless it succeeds
+		success := false
+		r := retry
+		for ; r > 0 && !success; r-- {
+			//request file is not set, use standard http mode
+			if reqFileContent == "" {
+				success = sendReqHttp(positions, reqTemplate, timeout, mc, recursePosition, recurseDelim)
+			} else { //send reqFile over tcp socket
+				success = sendReqTcp(positions, reqTemplate, reqFileContent, tcpConn, timeout, mc, recursePosition, recurseDelim)
+			}
 		}
 
 	}
@@ -199,7 +227,7 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 	}
 }
 
-func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, mc []string, depth int, recursePos int, recurseDelim string, extensions []string) {
+func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, mc []string, depth int, recursePos int, recurseDelim string, extensions []string, retry int) {
 	for i := 0; i <= depth && len(FrontierQ) > 0; i++ { // iteratively search web directories
 		reqChan := make(chan []string)
 		var wg sync.WaitGroup
@@ -207,7 +235,7 @@ func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTempla
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				sendReq(reqChan, reqTemplate, reqFileContent, tcpConn, timeout, mc, recursePos, recurseDelim)
+				sendReq(reqChan, reqTemplate, reqFileContent, tcpConn, timeout, mc, recursePos, recurseDelim, retry)
 			}()
 		}
 
@@ -232,10 +260,11 @@ func parseArgs(args []string) argStruct {
 	flag.StringVar(&(progArgs.headers), "H", "", "Comma seperated list of headers: 'Header1: value1,Header2: value2'")
 	flag.StringVar(&(progArgs.method), "method", "GET", "The type of http request: Usually GET, or POST")
 	flag.BoolVar(&(progArgs.brute), "brute", true, "Whether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line.")
-	flag.IntVar(&(progArgs.timeout), "to", 10, "The timeout for each web request")
+	flag.IntVar(&(progArgs.timeout), "to", 5, "The timeout for each web request")
 	flag.StringVar(&(progArgs.mc), "mc", "200,204,301,302,307,401,403,405,500", "The http response codes to match")
 	flag.StringVar(&(progArgs.fc), "fc", "", "The http response codes to filter")
 	flag.StringVar(&(progArgs.e), "e", "", "The comma separated file extensions to fuzz with. Example: '.txt,.php,.html'")
+	flag.IntVar(&(progArgs.retry), "retry", 3, "The number of times to retry a request before giving up")
 	flag.Parse()
 	progArgs.files = flag.Args()
 	return progArgs
@@ -276,7 +305,7 @@ func main() {
 	}
 	TotalJobs = GetNumJobs(args.files, args.brute, extensions)
 	go PrintProgressLoop()
-	recurseFuzz(args.threads, args.timeout, args.files, args.brute, reqTemplate, reqFileContent, tcpConn, mc, args.depth, args.recursePosition, args.recurseDelimeter, extensions)
+	recurseFuzz(args.threads, args.timeout, args.files, args.brute, reqTemplate, reqFileContent, tcpConn, mc, args.depth, args.recursePosition, args.recurseDelimeter, extensions, args.retry)
 	PrintProgress()
 	fmt.Println()
 }
