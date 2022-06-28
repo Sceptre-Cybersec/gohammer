@@ -40,6 +40,8 @@ type TcpAddress struct {
 	Ssl     bool
 }
 
+// replacePosition scans a string for the position marker and replaces it with a word
+// from the corresponding wordlist
 func replacePosition(str string, positions []string, recursePos int) string {
 	r, _ := regexp.Compile(`@(\d+)@`)
 	defer func() {
@@ -64,6 +66,7 @@ func replacePosition(str string, positions []string, recursePos int) string {
 	return str
 }
 
+// PrintProgressLoop prints the current progress to stdout every second and adds the current request/second to an array
 func PrintProgressLoop() {
 	for {
 		time.Sleep(1 * time.Second)
@@ -77,6 +80,8 @@ func PrintProgressLoop() {
 	}
 }
 
+// PrintProgress prints the formatted progress string to stdout and computes the request/second average using an array
+// populated by PrintProgressLoop
 func PrintProgress() {
 	avg := 0
 	sum := 0
@@ -91,6 +96,8 @@ func PrintProgress() {
 	fmt.Printf("\rProgress: %d/%d - %d/s - Errors: %d    \t", Counter, TotalJobs, avg, ErrorCounter)
 }
 
+// CheckCodeFound determines if a response code is found based on match codes in the param (mc),
+// and logs it to stdout if it is found
 func CheckCodeFound(codeNumber int, positions []string, recursePosition int, mc []string) {
 	mcFound := false
 	code := strconv.Itoa(codeNumber)
@@ -110,6 +117,8 @@ func CheckCodeFound(codeNumber int, positions []string, recursePosition int, mc 
 	}
 }
 
+// GetTcpRespCode parses the response code from a raw tcp response.
+// Returns the response code as a string
 func GetTcpRespCode(resp string) string {
 	respRx := regexp.MustCompile(`HTTP/\S+\s(\d+)`)
 	match := respRx.FindStringSubmatch(resp)
@@ -120,6 +129,8 @@ func GetTcpRespCode(resp string) string {
 	return code
 }
 
+// Converts a URL to an address for a tcp socket.
+// Returns a struct containing the address, port, and if tls is in use
 func UrlToTcpAddress(url string) TcpAddress {
 	// returns port number and if ssl is being used
 	ssl := false
@@ -161,18 +172,22 @@ func UrlToTcpAddress(url string) TcpAddress {
 	return TcpAddress{Address: address, Port: port, Ssl: ssl}
 }
 
+// CounterInc increments the request progress counter
 func CounterInc() {
 	counterLock.Lock()
 	Counter++
 	counterLock.Unlock()
 }
 
+// ErrorCounterInc increments the request error counter whenever a request fails
 func ErrorCounterInc() {
 	errorCounterLock.Lock()
 	ErrorCounter++
 	errorCounterLock.Unlock()
 }
 
+// ProcReqTemplate applies words from a set of wordlists to a request template
+// Returns the parsed request template
 func ProcReqTemplate(req Request, positions []string, recursePos int) Request {
 	parsedReq := req
 	parsedReq.Url = replacePosition(parsedReq.Url, positions, recursePos)
@@ -182,13 +197,8 @@ func ProcReqTemplate(req Request, positions []string, recursePos int) Request {
 	return parsedReq
 }
 
-// func AddCarriageReturns(req string) string {
-// 	carriageRx := regexp.MustCompile(`\r\n`)
-// 	fixedReq := carriageRx.ReplaceAllString(req, "\r\n")
-// 	fmt.Println(fixedReq)
-// 	return fixedReq
-// }
-
+// RemoveTrailingNewLine corrects the request file. Some text editors add a trailing new line to a file after saving.
+// This logic removes the new line added by some text editors.
 func RemoveTrailingNewline(req string) string {
 	fixedReq := req
 	// get requests normally end with double CRLF
@@ -198,6 +208,7 @@ func RemoveTrailingNewline(req string) string {
 	return fixedReq
 }
 
+// ProcTcpReqTemplate corrects the Content-Length header when sending http post data
 func ProcTcpReqTemplate(req string, positions []string, recursePos int) string {
 	parsedReq := replacePosition(req, positions, recursePos)
 	contLenRx := regexp.MustCompile(`(?mi)Content-Length: \d+\r\n\r\n(.*)`)
@@ -211,6 +222,8 @@ func ProcTcpReqTemplate(req string, positions []string, recursePos int) string {
 	return parsedReq
 }
 
+// IsRecurseHttp determines if a given http response signifies a web directory
+// Returns a tuple containing the bool that tells if the response is from a web directory, and the status code of the http response
 func IsRecurseHttp(resp *http.Response, err error) (bool, int) {
 	var code int
 	if err != nil {
@@ -231,6 +244,8 @@ func IsRecurseHttp(resp *http.Response, err error) (bool, int) {
 	return recurse, code
 }
 
+// IsRecurseTcp determines if a given tcp response signifies a web directory
+// Returns a tuple containing the boolean that tells if the response is from a web directory, and the status code of the http response
 func IsRecurseTcp(resp string) (bool, int) {
 	codeString := GetTcpRespCode(resp)
 	code, err := strconv.Atoi(codeString)
@@ -242,6 +257,8 @@ func IsRecurseTcp(resp string) (bool, int) {
 	return recurse, code
 }
 
+// isRecurse determines if the response codes signify a web directory
+// Returns true if the response code is from a web directory
 func isRecurse(code int) bool {
 	codes := []int{301, 302}
 	ret := false
@@ -254,6 +271,8 @@ func isRecurse(code int) bool {
 	return ret
 }
 
+// SetDif determines the set difference of two arrays
+// Returns the resulting difference
 func SetDif(a, b []string) (diff []string) {
 	m := make(map[string]bool)
 
@@ -269,6 +288,8 @@ func SetDif(a, b []string) (diff []string) {
 	return
 }
 
+// GetNumJobs computes the number of jobs based on the file length and number of fuzzing positions
+// Returns the total number of jobs
 func GetNumJobs(fnames []string, brute bool, extensions []string) int {
 	var files []*bufio.Scanner
 	for _, fname := range fnames {
@@ -300,6 +321,8 @@ func GetNumJobs(fnames []string, brute bool, extensions []string) int {
 	return numJobs
 }
 
+// getFileLen computes the length of user provided wordlists
+// Returns the length of a given file
 func getFileLen(r *bufio.Scanner) int {
 	// return the length of the file
 	count := 0

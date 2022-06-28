@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	. "gohammer/utils"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	. "github.com/wadeking98/gohammer/utils"
 )
 
 var httpChan chan string = make(chan string)

@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	. "gohammer/utils"
 	"io"
 	"io/ioutil"
 	"net"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	. "github.com/wadeking98/gohammer/utils"
 )
 
 type argStruct struct {
@@ -36,6 +37,9 @@ type argStruct struct {
 	retry            int
 }
 
+// sendReqTcp sends an http request using a tcp connection.
+// This function is used when sending from a request file.
+// Returns true if request succeeds
 func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, timeout int, mc []string, recursePosition int, recurseDelim string) bool {
 	// send request using raw tcp or tls, returns false if request failed
 	var connClient io.ReadWriter
@@ -86,6 +90,8 @@ func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, 
 	return true
 }
 
+// sendReqHttp sends a http request using the built in http library in golang.
+// if returns true if the request is successful
 func sendReqHttp(positions []string, reqTemplate Request, timeout int, mc []string, recursePosition int, recurseDelim string) bool {
 	// send request using http or https, returns false if request failed
 	client := http.Client{
@@ -123,6 +129,7 @@ func sendReqHttp(positions []string, reqTemplate Request, timeout int, mc []stri
 	return true
 }
 
+// applyRecurse increments the progress counter and adds the directory to the queue if it is a web directory
 func applyRecurse(code int, recurse bool, positions []string, recursePosition int, recurseDelim string, mc []string) {
 	CounterInc()
 
@@ -134,6 +141,8 @@ func applyRecurse(code int, recurse bool, positions []string, recursePosition in
 	}
 }
 
+// sendReq is a wrapper function for sendReqHttp and sendReqTcp.
+// It will retry failed requests a specified number of times.
 func sendReq(positionsChan chan []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, timeout int, mc []string, recursePosition int, recurseDelim string, retry int) {
 
 	// while receiving input on channel
@@ -153,6 +162,8 @@ func sendReq(positionsChan chan []string, reqTemplate Request, reqFileContent st
 	}
 }
 
+// procExtensions adds use specified file extensions onto fuzzing data and then sends the modified data
+// to the request channel which is picked up by the sendReq methods
 func procExtensions(currString []string, extensions []string, reqChan chan []string) {
 	if len(extensions) <= 0 {
 		reqChan <- currString
@@ -167,6 +178,7 @@ func procExtensions(currString []string, extensions []string, reqChan chan []str
 	}
 }
 
+// procFiles opens user supplied wordlists and adds words from each wordlist to user specified positions
 func procFiles(fnames []string, currString []string, reqChan chan []string, brute bool, extensions []string) {
 	if brute { //use recursive strategy
 		//send string to channel
@@ -227,6 +239,8 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 	}
 }
 
+// recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
+// calls procFiles to start sending data over the channels
 func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, mc []string, depth int, recursePos int, recurseDelim string, extensions []string, retry int) {
 	for i := 0; i <= depth && len(FrontierQ) > 0; i++ { // iteratively search web directories
 		reqChan := make(chan []string)
@@ -248,32 +262,74 @@ func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTempla
 	}
 }
 
+// parseArgs processes and packs command line arguments into a struct
 func parseArgs(args []string) argStruct {
 	var progArgs argStruct
-	flag.StringVar(&(progArgs.url), "u", "http://127.0.0.1/", "The Url of the website to fuzz")
-	flag.StringVar(&(progArgs.data), "d", "", "The data to provide in the request (Usually post)")
-	flag.IntVar(&(progArgs.threads), "t", 10, "The number of concurrect threads")
-	flag.StringVar(&(progArgs.reqFile), "f", "", "The request template file to use (Usually a request file saved from BurpSuite)")
-	flag.IntVar(&(progArgs.depth), "rd", 0, "The recursion depth of the search")
-	flag.IntVar(&(progArgs.recursePosition), "rp", 0, "The position to recurse on")
-	flag.StringVar(&(progArgs.recurseDelimeter), "rdl", "/", "The string to append to the base string when recursing")
-	flag.StringVar(&(progArgs.headers), "H", "", "Comma seperated list of headers: 'Header1: value1,Header2: value2'")
-	flag.StringVar(&(progArgs.method), "method", "GET", "The type of http request: Usually GET, or POST")
-	flag.BoolVar(&(progArgs.brute), "brute", true, "Whether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line.")
-	flag.IntVar(&(progArgs.timeout), "to", 5, "The timeout for each web request")
-	flag.StringVar(&(progArgs.mc), "mc", "200,204,301,302,307,401,403,405,500", "The http response codes to match")
-	flag.StringVar(&(progArgs.fc), "fc", "", "The http response codes to filter")
-	flag.StringVar(&(progArgs.e), "e", "", "The comma separated file extensions to fuzz with. Example: '.txt,.php,.html'")
-	flag.IntVar(&(progArgs.retry), "retry", 3, "The number of times to retry a request before giving up")
+	flag.Usage = func() {
+		fmt.Println()
+		fmt.Println("Usage: gohammer [options] wordlist1 wordlist2 ...")
+		fmt.Println()
+		fmt.Println("Request Options:")
+		fmt.Println("-u\tThe URL of the website to fuzz [Default:'http://127.0.0.1/']")
+		fmt.Println("-d\tThe data to provide in the request")
+		fmt.Println("-f\tThe request template file to use (Usually a request file saved from BurpSuite)")
+		fmt.Println("-H\tComma seperated list of headers: 'Header1: value1,Header2: value2'")
+		fmt.Println("-to\tThe timeout for each web request [Default:5]")
+		fmt.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
+		fmt.Println()
+		fmt.Println("General Options:")
+		fmt.Println("-t\tThe number of concurrent threads [Default:10]")
+		fmt.Println("-retry\tThe number of times to retry a failed request before giving up [Default:3]")
+		fmt.Println()
+		fmt.Println("Recursion Options:")
+		fmt.Println("-rd\tThe recursion depth of the search [Default:0]")
+		fmt.Println("-rp\tThe position to recurse on [Default:0]")
+		fmt.Println("-rdl\tThe string to append to the base string when recursing [Default:'/']")
+		fmt.Println()
+		fmt.Println("Filter Options:")
+		fmt.Println("-mc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
+		fmt.Println("-fc\tThe http response codes to filter")
+		fmt.Println()
+		fmt.Println("Wordlist Options:")
+		fmt.Println("-brute\tWhether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line. [Default:true]")
+		fmt.Println("-e\tThe comma separated file extensions to fuzz with. Example: '.txt,.php,.html'")
+		fmt.Println()
+		fmt.Println()
+		fmt.Println("Example Usage:")
+		fmt.Println("gohammer -u http://127.0.0.1/@0@ -t 32 -e .txt,.html,.php /home/me/myWordlist.txt")
+		fmt.Println("gohammer -u https://some.site.com/ -method POST -d '{\"user\":\"@0@\", \"password\":\"@1@\"}' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+		fmt.Println("gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+	}
+
+	flag.StringVar(&(progArgs.url), "u", "http://127.0.0.1/", "")
+	flag.StringVar(&(progArgs.data), "d", "", "")
+	flag.IntVar(&(progArgs.threads), "t", 10, "")
+	flag.StringVar(&(progArgs.reqFile), "f", "", "")
+	flag.IntVar(&(progArgs.depth), "rd", 0, "")
+	flag.IntVar(&(progArgs.recursePosition), "rp", 0, "")
+	flag.StringVar(&(progArgs.recurseDelimeter), "rdl", "/", "")
+	flag.StringVar(&(progArgs.headers), "H", "", "")
+	flag.StringVar(&(progArgs.method), "method", "GET", "")
+	flag.BoolVar(&(progArgs.brute), "brute", true, "")
+	flag.IntVar(&(progArgs.timeout), "to", 5, "")
+	flag.StringVar(&(progArgs.mc), "mc", "200,204,301,302,307,401,403,405,500", "")
+	flag.StringVar(&(progArgs.fc), "fc", "", "")
+	flag.StringVar(&(progArgs.e), "e", "", "")
+	flag.IntVar(&(progArgs.retry), "retry", 3, "")
 	flag.Parse()
 	progArgs.files = flag.Args()
 	return progArgs
 }
 
+// banner prints the title banner
+func banner() {
+	fmt.Println("+----------------------------------------+")
+	fmt.Println("|GOHAMMER 🔨 - A Web Fuzzer Written in GO|")
+	fmt.Println("+----------------------------------------+")
+}
+
 func main() {
-	fmt.Println("+-------------------------------------+")
-	fmt.Println("|GOHAMMER - A Web Fuzzer Written in GO|")
-	fmt.Println("+-------------------------------------+")
+	banner()
 
 	args := parseArgs(os.Args)
 
@@ -290,13 +346,16 @@ func main() {
 		tcpConn = UrlToTcpAddress(args.url)
 	}
 
+	// create request template from command line args
 	reqTemplate := Request{
 		Url:     args.url,
 		Method:  args.method,
 		Headers: args.headers,
 		Body:    args.data,
 	}
+	// apply filter codes
 	mc := SetDif(strings.Split(args.mc, ","), strings.Split(args.fc, ","))
+	// parse user supplied extensions
 	extensions := strings.Split(args.e, ",")
 	// if no extensions then "" gets added anyway
 	if args.e != "" {
