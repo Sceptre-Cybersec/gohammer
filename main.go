@@ -15,39 +15,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wadeking98/gohammer/config"
 	. "github.com/wadeking98/gohammer/utils"
 )
-
-type argStruct struct {
-	url              string
-	threads          int
-	method           string
-	reqFile          string
-	brute            bool
-	headers          string
-	files            []string
-	mc               string
-	fc               string
-	timeout          int
-	e                string
-	data             string
-	depth            int
-	recursePosition  int
-	recurseDelimeter string
-	retry            int
-}
 
 // sendReqTcp sends an http request using a tcp connection.
 // This function is used when sending from a request file.
 // Returns true if request succeeds
-func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, timeout int, mc []string, recursePosition int, recurseDelim string) bool {
+func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, args config.Args) bool {
 	// send request using raw tcp or tls, returns false if request failed
 	var connClient io.ReadWriter
 	if tcpConn.Ssl {
 		conf := &tls.Config{
 			InsecureSkipVerify: true,
 		}
-		d := net.Dialer{Timeout: time.Duration(timeout) * time.Second}
+		d := net.Dialer{Timeout: time.Duration(args.Timeout) * time.Second}
 		connClientTls, err := tls.DialWithDialer(&d, "tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port), conf)
 		if err != nil {
 			ErrorCounterInc()
@@ -56,7 +38,7 @@ func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, 
 		defer connClientTls.Close()
 		connClient = connClientTls
 	} else {
-		connClientTcp, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port), time.Duration(timeout*int(time.Second)))
+		connClientTcp, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port), time.Duration(args.Timeout*int(time.Second)))
 		if err != nil {
 			ErrorCounterInc()
 			return false
@@ -65,7 +47,7 @@ func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, 
 		connClient = connClientTcp
 	}
 	// apply wordlist and send
-	parsedReq := ProcTcpReqTemplate(reqFileContent, positions, recursePosition)
+	parsedReq := ProcTcpReqTemplate(reqFileContent, positions, args.RecursePosition)
 	fmt.Fprint(connClient, parsedReq)
 
 	//listen for reply and construct response
@@ -86,18 +68,35 @@ func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, 
 		return false
 	}
 
-	applyRecurse(code, recurse, positions, recursePosition, recurseDelim, mc)
+	respBodyText := TcpRespToRespBody(message)
+	processResp(code, recurse, positions, respBodyText, args)
 	return true
 }
 
 // sendReqHttp sends a http request using the built in http library in golang.
 // if returns true if the request is successful
-func sendReqHttp(positions []string, reqTemplate Request, timeout int, mc []string, recursePosition int, recurseDelim string) bool {
+func sendReqHttp(positions []string, reqTemplate Request, args config.Args) bool {
 	// send request using http or https, returns false if request failed
 	client := http.Client{
-		Timeout: time.Duration(timeout * int(time.Second)),
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+		Timeout:       time.Duration(args.Timeout * int(time.Second)),
+		Transport: &http.Transport{
+			ForceAttemptHTTP2:   true,
+			MaxIdleConns:        1000,
+			MaxIdleConnsPerHost: 500,
+			MaxConnsPerHost:     500,
+			DialContext: (&net.Dialer{
+				Timeout: time.Duration(args.Timeout * int(time.Second)),
+			}).DialContext,
+			TLSHandshakeTimeout: time.Duration(args.Timeout * int(time.Second)),
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+				Renegotiation:      tls.RenegotiateOnceAsClient,
+				ServerName:         "",
+			},
+		},
 	}
-	parsedReq := ProcReqTemplate(reqTemplate, positions, recursePosition)
+	parsedReq := ProcReqTemplate(reqTemplate, positions, args.RecursePosition)
 	req, err := http.NewRequest(parsedReq.Method, parsedReq.Url, bytes.NewBuffer([]byte(parsedReq.Body)))
 	if err != nil {
 		fmt.Println("Error making request")
@@ -124,38 +123,53 @@ func sendReqHttp(positions []string, reqTemplate Request, timeout int, mc []stri
 		return false
 	}
 
-	applyRecurse(code, recurse, positions, recursePosition, recurseDelim, mc)
+	var respBodyText []byte
+	if resp != nil {
+		respBodyText, _ = ioutil.ReadAll(resp.Body)
+	}
+
+	processResp(code, recurse, positions, string(respBodyText), args)
 
 	return true
 }
 
-// applyRecurse increments the progress counter and adds the directory to the queue if it is a web directory
-func applyRecurse(code int, recurse bool, positions []string, recursePosition int, recurseDelim string, mc []string) {
+// processResp increments the progress counter and adds the directory to the queue if it is a web directory
+func processResp(code int, recurse bool, positions []string, resp string, args config.Args) {
 	CounterInc()
 
-	CheckCodeFound(code, positions, recursePosition, mc)
+	sizes := SizeRespBody(resp)
+	passed := CheckFound(code, sizes, args)
+
+	if passed {
+		displayPos := make([]string, len(positions))
+		copy(displayPos, positions)
+		displayPos[args.RecursePosition] = FrontierQ[0] + positions[args.RecursePosition]
+		fmt.Printf("\r%d - %s    Size:%d    Words:%d    Lines:%d                        \n", code, displayPos, sizes[0], sizes[1], sizes[2])
+		PrintProgress()
+	}
+
 	if recurse {
 		FrontierLock.Lock()
-		FrontierQ = append(FrontierQ, FrontierQ[0]+positions[recursePosition]+recurseDelim)
+		FrontierQ = append(FrontierQ, FrontierQ[0]+positions[args.RecursePosition]+args.RecurseDelimeter)
 		FrontierLock.Unlock()
 	}
 }
 
 // sendReq is a wrapper function for sendReqHttp and sendReqTcp.
 // It will retry failed requests a specified number of times.
-func sendReq(positionsChan chan []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, timeout int, mc []string, recursePosition int, recurseDelim string, retry int) {
+func sendReq(positionsChan chan []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, args config.Args) {
 
 	// while receiving input on channel
 	for positions, ok := <-positionsChan; ok; positions, ok = <-positionsChan {
 		//retry request x times unless it succeeds
 		success := false
-		r := retry
+		r := args.Retry
 		for ; r > 0 && !success; r-- {
 			//request file is not set, use standard http mode
 			if reqFileContent == "" {
-				success = sendReqHttp(positions, reqTemplate, timeout, mc, recursePosition, recurseDelim)
+				success = sendReqHttp(positions, reqTemplate, args)
 			} else { //send reqFile over tcp socket
-				success = sendReqTcp(positions, reqTemplate, reqFileContent, tcpConn, timeout, mc, recursePosition, recurseDelim)
+				success = sendReqTcp(positions, reqTemplate, reqFileContent, tcpConn, args)
 			}
 		}
 
@@ -241,19 +255,19 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 
 // recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
 // calls procFiles to start sending data over the channels
-func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, mc []string, depth int, recursePos int, recurseDelim string, extensions []string, retry int) {
-	for i := 0; i <= depth && len(FrontierQ) > 0; i++ { // iteratively search web directories
+func recurseFuzz(reqTemplate Request, reqFileContent string, tcpConn TcpAddress, args config.Args) {
+	for i := 0; i <= args.Depth && len(FrontierQ) > 0; i++ { // iteratively search web directories
 		reqChan := make(chan []string)
 		var wg sync.WaitGroup
-		for i := 0; i < threads; i++ {
+		for i := 0; i < args.Threads; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				sendReq(reqChan, reqTemplate, reqFileContent, tcpConn, timeout, mc, recursePos, recurseDelim, retry)
+				sendReq(reqChan, reqTemplate, reqFileContent, tcpConn, args)
 			}()
 		}
 
-		procFiles(files, nil, reqChan, brute, extensions)
+		procFiles(args.Files, nil, reqChan, args.Brute, args.E)
 		close(reqChan)
 		wg.Wait()
 		FrontierLock.Lock()
@@ -263,8 +277,8 @@ func recurseFuzz(threads int, timeout int, files []string, brute bool, reqTempla
 }
 
 // parseArgs processes and packs command line arguments into a struct
-func parseArgs(args []string) argStruct {
-	var progArgs argStruct
+func parseArgs(args []string) config.Args {
+	var progArgs config.Args
 	flag.Usage = func() {
 		fmt.Println()
 		fmt.Println("Usage: gohammer [options] wordlist1 wordlist2 ...")
@@ -273,7 +287,7 @@ func parseArgs(args []string) argStruct {
 		fmt.Println("-u\tThe URL of the website to fuzz [Default:'http://127.0.0.1/']")
 		fmt.Println("-d\tThe data to provide in the request")
 		fmt.Println("-f\tThe request template file to use (Usually a request file saved from BurpSuite)")
-		fmt.Println("-H\tComma seperated list of headers: 'Header1: value1,Header2: value2'")
+		fmt.Println("-H\tList of headers, one per flag: -H 'Header1: value1' -H 'Header2: value2'")
 		fmt.Println("-to\tThe timeout for each web request [Default:5]")
 		fmt.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
 		fmt.Println()
@@ -289,6 +303,9 @@ func parseArgs(args []string) argStruct {
 		fmt.Println("Filter Options:")
 		fmt.Println("-mc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
 		fmt.Println("-fc\tThe http response codes to filter")
+		fmt.Println("-fs\tFilter http response by size")
+		fmt.Println("-fw\tFilter http response by number of words")
+		fmt.Println("-fl\tFilter http response by number of lines")
 		fmt.Println()
 		fmt.Println("Wordlist Options:")
 		fmt.Println("-brute\tWhether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line. [Default:true]")
@@ -301,24 +318,33 @@ func parseArgs(args []string) argStruct {
 		fmt.Println("gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 	}
 
-	flag.StringVar(&(progArgs.url), "u", "http://127.0.0.1/", "")
-	flag.StringVar(&(progArgs.data), "d", "", "")
-	flag.IntVar(&(progArgs.threads), "t", 10, "")
-	flag.StringVar(&(progArgs.reqFile), "f", "", "")
-	flag.IntVar(&(progArgs.depth), "rd", 0, "")
-	flag.IntVar(&(progArgs.recursePosition), "rp", 0, "")
-	flag.StringVar(&(progArgs.recurseDelimeter), "rdl", "/", "")
-	flag.StringVar(&(progArgs.headers), "H", "", "")
-	flag.StringVar(&(progArgs.method), "method", "GET", "")
-	flag.BoolVar(&(progArgs.brute), "brute", true, "")
-	flag.IntVar(&(progArgs.timeout), "to", 5, "")
-	flag.StringVar(&(progArgs.mc), "mc", "200,204,301,302,307,401,403,405,500", "")
-	flag.StringVar(&(progArgs.fc), "fc", "", "")
-	flag.StringVar(&(progArgs.e), "e", "", "")
-	flag.IntVar(&(progArgs.retry), "retry", 3, "")
+	flag.StringVar(&(progArgs.Url), "u", "http://127.0.0.1/", "")
+	flag.StringVar(&(progArgs.Data), "d", "", "")
+	flag.IntVar(&(progArgs.Threads), "t", 10, "")
+	flag.StringVar(&(progArgs.ReqFile), "f", "", "")
+	flag.IntVar(&(progArgs.Depth), "rd", 0, "")
+	flag.IntVar(&(progArgs.RecursePosition), "rp", 0, "")
+	flag.StringVar(&(progArgs.RecurseDelimeter), "rdl", "/", "")
+	flag.Var(&(progArgs.Headers), "H", "")
+	flag.StringVar(&(progArgs.Method), "method", "GET", "")
+	flag.BoolVar(&(progArgs.Brute), "brute", true, "")
+	flag.IntVar(&(progArgs.Timeout), "to", 5, "")
+	flag.Var(&(progArgs.Mc), "mc", "")
+	flag.Var(&(progArgs.Fc), "fc", "")
+	flag.Var(&(progArgs.Fs), "fs", "")
+	flag.Var(&(progArgs.Fw), "fw", "")
+	flag.Var(&(progArgs.Fl), "fl", "")
+	flag.Var(&(progArgs.E), "e", "")
+	flag.IntVar(&(progArgs.Retry), "retry", 3, "")
 	flag.Parse()
-	progArgs.files = flag.Args()
+	progArgs.Files = flag.Args()
 	return progArgs
+}
+
+func loadDefaults(args *config.Args) {
+	if len(args.Mc) <= 0 {
+		args.Mc.Set("200,204,301,302,303,307,308,401,403,405,500")
+	}
 }
 
 // banner prints the title banner
@@ -332,39 +358,39 @@ func main() {
 	banner()
 
 	args := parseArgs(os.Args)
+	loadDefaults(&args)
 
 	//load request file contents
 	var tcpConn TcpAddress
 	reqFileContent := ""
-	if args.reqFile != "" {
-		fileBytes, err := ioutil.ReadFile(args.reqFile)
+	if args.ReqFile != "" {
+		fileBytes, err := ioutil.ReadFile(args.ReqFile)
 		if err != nil {
-			fmt.Printf("Error: couldn't open %s\n", args.reqFile)
+			fmt.Printf("Error: couldn't open %s\n", args.ReqFile)
 			os.Exit(1)
 		}
 		reqFileContent = RemoveTrailingNewline(string(fileBytes))
-		tcpConn = UrlToTcpAddress(args.url)
+		tcpConn = UrlToTcpAddress(args.Url)
 	}
 
 	// create request template from command line args
 	reqTemplate := Request{
-		Url:     args.url,
-		Method:  args.method,
-		Headers: args.headers,
-		Body:    args.data,
+		Url:     args.Url,
+		Method:  args.Method,
+		Headers: strings.Join(args.Headers, ","),
+		Body:    args.Data,
 	}
 	// apply filter codes
-	mc := SetDif(strings.Split(args.mc, ","), strings.Split(args.fc, ","))
+	args.Mc = SetDif(args.Mc, args.Fc)
 	// parse user supplied extensions
-	extensions := strings.Split(args.e, ",")
 	// if no extensions then "" gets added anyway
-	if args.e != "" {
+	if len(args.E) <= 0 {
 		//add blank extension
-		extensions = append(extensions, "")
+		args.E = append(args.E, "")
 	}
-	TotalJobs = GetNumJobs(args.files, args.brute, extensions)
+	TotalJobs = GetNumJobs(args.Files, args.Brute, args.E)
 	go PrintProgressLoop()
-	recurseFuzz(args.threads, args.timeout, args.files, args.brute, reqTemplate, reqFileContent, tcpConn, mc, args.depth, args.recursePosition, args.recurseDelimeter, extensions, args.retry)
+	recurseFuzz(reqTemplate, reqFileContent, tcpConn, args)
 	PrintProgress()
 	fmt.Println()
 }
