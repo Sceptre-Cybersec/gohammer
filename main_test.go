@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wadeking98/gohammer/config"
 	. "github.com/wadeking98/gohammer/utils"
 )
 
@@ -45,7 +46,8 @@ func TestSetup(t *testing.T) {
 
 func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
-	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@", Headers: "Content-Type: @0@,Host: @0@@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "", 5)
+	// go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@", Headers: "Content-Type: @0@,Host: @0@@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "", 5)
+	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@", Headers: "Content-Type: @0@,Host: @0@@1@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
 	reqChan <- []string{"a", "b"}
 	close(reqChan)
 	urlResp := <-urlChan
@@ -78,9 +80,9 @@ func TestProcReqTemplate(t *testing.T) {
 
 func TestBrute(t *testing.T) {
 	reqChan := make(chan []string)
-	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "", 5)
+	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
 
-	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "", 5)
+	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
 	procFiles([]string{"tests/a.txt", "tests/b.txt"}, nil, reqChan, false, []string{})
 	close(reqChan)
 	resp := []string{<-urlChan, <-urlChan}
@@ -102,7 +104,7 @@ func TestBrute(t *testing.T) {
 func TestExtensions(t *testing.T) {
 	reqChan := make(chan []string)
 	for i := 0; i < 4; i++ {
-		go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@_@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "", 5)
+		go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@_@1@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
 	}
 
 	procFiles([]string{"tests/a.txt", "tests/b.txt"}, nil, reqChan, false, []string{".txt", ".php"})
@@ -126,7 +128,7 @@ func TestExtensions(t *testing.T) {
 
 func TestPostData(t *testing.T) {
 	reqChan := make(chan []string)
-	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/data", Body: "test=hello@0@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "", 5)
+	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/data", Body: "test=hello@0@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
 	procFiles([]string{"tests/oneChar.txt"}, nil, reqChan, false, []string{""})
 	close(reqChan)
 	resp := <-bodyChan
@@ -138,7 +140,9 @@ func TestPostData(t *testing.T) {
 }
 
 func TestRecursion(t *testing.T) {
-	go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{Method: "GET", Url: "http://127.0.0.1:8080/recurse/@0@"}, "", TcpAddress{}, []string{"200", "301"}, 2, 0, "/", nil, 5)
+	// argStruct{timeout: 10, mc: []string{"200"},recursePosition: 0, recurseDelimeter: "", retry: 5 }
+	// go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{Method: "GET", Url: "http://127.0.0.1:8080/recurse/@0@"}, "", TcpAddress{}, []string{"200", "301"}, 2, 0, "/", nil, 5)
+	go recurseFuzz(Request{Method: "GET", Url: "http://127.0.0.1:8080/recurse/@0@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
 	url1 := <-urlChan
 	url2 := <-urlChan
 	url3 := <-urlChan
@@ -186,7 +190,7 @@ func TestReqFile(t *testing.T) {
 	reqFileContent := string(fileBytes)
 	//reset frontier
 	FrontierQ = []string{""}
-	go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, []string{"200", "301"}, 2, 0, "/", nil, 5)
+	go recurseFuzz(Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
 	url := <-urlChan
 	fmt.Println(url)
 	if url != "/tcp/c" {
@@ -198,7 +202,7 @@ func TestReqFile(t *testing.T) {
 		fmt.Println("Error: couldn't open file")
 	}
 	reqFileContent = RemoveTrailingNewline(string(fileBytes))
-	go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, []string{"200", "301"}, 2, 0, "/", nil, 5)
+	go recurseFuzz(Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
 	body := <-bodyChan
 	url = <-urlChan
 	if url != "/data/c" {
@@ -216,7 +220,7 @@ func TestRecursionTcp(t *testing.T) {
 	}
 	reqFileContent := string(fileBytes)
 
-	go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, []string{"200", "301"}, 2, 0, "/", nil, 5)
+	go recurseFuzz(Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
 	time.Sleep(1 * time.Second)
 	url1 := <-urlChan
 	url2 := <-urlChan

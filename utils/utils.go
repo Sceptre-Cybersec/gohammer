@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/wadeking98/gohammer/config"
 )
 
 var FrontierQ []string = []string{""}
@@ -96,25 +98,54 @@ func PrintProgress() {
 	fmt.Printf("\rProgress: %d/%d - %d/s - Errors: %d    \t", Counter, TotalJobs, avg, ErrorCounter)
 }
 
-// CheckCodeFound determines if a response code is found based on match codes in the param (mc),
-// and logs it to stdout if it is found
-func CheckCodeFound(codeNumber int, positions []string, recursePosition int, mc []string) {
-	mcFound := false
-	code := strconv.Itoa(codeNumber)
-	for _, i := range mc {
-		if code == i {
-			mcFound = true
+// Checkfound returns true if a request passes all filters
+func CheckFound(codeNumber int, sizes []int, args config.Args) bool {
+	lengthCheck := passedLengthFilter(sizes, args)
+	codeCheck := checkCodeFound(codeNumber, args.Mc)
+
+	return lengthCheck && codeCheck
+}
+
+// passedLengthFilter takes the response sizes (chars, words, lines) respectively as an array and returns true if none of the
+// length filters captures a response length
+func passedLengthFilter(sizes []int, args config.Args) bool {
+	filterPassed := true
+	filters := [][]int{args.Fs, args.Fw, args.Fl}
+	for i, s := range sizes { //apply length filter to chars, words, lines
+		filterPassed = filterPassed && !lenFilterMatches(s, filters[i])
+		if !filterPassed {
 			break
 		}
 	}
 
-	if mcFound {
-		displayPos := make([]string, len(positions))
-		copy(displayPos, positions)
-		displayPos[recursePosition] = FrontierQ[0] + positions[recursePosition]
-		fmt.Printf("\r%s - %s                                \n", code, displayPos)
-		PrintProgress()
+	return filterPassed
+}
+
+//lenFilterMatches returns true if the length is in the array of lengths
+func lenFilterMatches(length int, lengths []int) bool {
+	ret := false
+	if len(lengths) > 0 {
+		for _, s := range lengths {
+			if s == length {
+				ret = true
+				break
+			}
+		}
 	}
+	return ret
+}
+
+// CheckCodeFound determines if a response code is found based on match codes in the param (mc),
+// and logs it to stdout if it is found
+func checkCodeFound(codeNumber int, mc []int) bool {
+	mcFound := false
+	for _, i := range mc {
+		if codeNumber == i {
+			mcFound = true
+			break
+		}
+	}
+	return mcFound
 }
 
 // GetTcpRespCode parses the response code from a raw tcp response.
@@ -197,6 +228,21 @@ func ProcReqTemplate(req Request, positions []string, recursePos int) Request {
 	return parsedReq
 }
 
+// TcpRespToRespBody parses response body from tcp response
+func TcpRespToRespBody(resp string) string {
+	rx := regexp.MustCompile(`(?msi)\r\n\r\n(.*)`)
+	matched := rx.FindStringSubmatch(resp)
+	if len(matched) <= 1 {
+		return ""
+	}
+	return matched[1]
+}
+
+// SizeRespBody takes a given response body and returns the number of chars, words, and lines respectively
+func SizeRespBody(resp string) []int {
+	return []int{len(strings.Split(resp, "")), len(strings.Split(resp, " ")), len(strings.Split(resp, "\n"))}
+}
+
 // RemoveTrailingNewLine corrects the request file. Some text editors add a trailing new line to a file after saving.
 // This logic removes the new line added by some text editors.
 func RemoveTrailingNewline(req string) string {
@@ -228,7 +274,7 @@ func IsRecurseHttp(resp *http.Response, err error) (bool, int) {
 	var code int
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "response missing Location header") {
-			rx, _ := regexp.Compile(`(\d+) response missing Location header`)
+			rx := regexp.MustCompile(`(\d+) response missing Location header`)
 			res := rx.FindStringSubmatch(err.Error())
 			codeString := res[1]
 			code, err = strconv.Atoi(codeString)
@@ -260,7 +306,7 @@ func IsRecurseTcp(resp string) (bool, int) {
 // isRecurse determines if the response codes signify a web directory
 // Returns true if the response code is from a web directory
 func isRecurse(code int) bool {
-	codes := []int{301, 302}
+	codes := []int{301, 302, 303, 307, 308}
 	ret := false
 	for _, c := range codes {
 		if c == code {
@@ -273,8 +319,8 @@ func isRecurse(code int) bool {
 
 // SetDif determines the set difference of two arrays
 // Returns the resulting difference
-func SetDif(a, b []string) (diff []string) {
-	m := make(map[string]bool)
+func SetDif(a, b []int) (diff []int) {
+	m := make(map[int]bool)
 
 	for _, item := range b {
 		m[item] = true
