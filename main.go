@@ -2,177 +2,54 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"crypto/tls"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"net"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/wadeking98/gohammer/config"
+	"github.com/wadeking98/gohammer/utils"
+	reqagent "github.com/wadeking98/gohammer/utils/reqAgent"
+
 	. "github.com/wadeking98/gohammer/utils"
 )
 
-// sendReqTcp sends an http request using a tcp connection.
-// This function is used when sending from a request file.
-// Returns true if request succeeds
-func sendReqTcp(positions []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, args config.Args) bool {
-	// send request using raw tcp or tls, returns false if request failed
-	var connClient io.ReadWriter
-	if tcpConn.Ssl {
-		conf := &tls.Config{
-			InsecureSkipVerify: true,
-		}
-		d := net.Dialer{Timeout: time.Duration(args.Timeout) * time.Second}
-		connClientTls, err := tls.DialWithDialer(&d, "tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port), conf)
-		if err != nil {
-			ErrorCounterInc()
-			return false
-		}
-		defer connClientTls.Close()
-		connClient = connClientTls
-	} else {
-		connClientTcp, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", tcpConn.Address, tcpConn.Port), time.Duration(args.Timeout*int(time.Second)))
-		if err != nil {
-			ErrorCounterInc()
-			return false
-		}
-		defer connClientTcp.Close()
-		connClient = connClientTcp
-	}
-	// apply wordlist and send
-	parsedReq := ProcTcpReqTemplate(reqFileContent, positions, args.RecursePosition)
-	fmt.Fprint(connClient, parsedReq)
-
-	//listen for reply and construct response
-	message := ""
-	reader := bufio.NewReader(connClient)
-	for {
-		messageLine, err := reader.ReadString('\n')
-		if err == io.EOF {
-			break
-		}
-		message += messageLine
-	}
-
-	recurse, code := IsRecurseTcp(message)
-	// not an error created by 301 without Location header
-	if code == 0 {
-		ErrorCounterInc()
-		return false
-	}
-
-	respBodyText := TcpRespToRespBody(message)
-	processResp(code, recurse, positions, respBodyText, args)
-	return true
-}
-
-// sendReqHttp sends a http request using the built in http library in golang.
-// if returns true if the request is successful
-func sendReqHttp(positions []string, reqTemplate Request, args config.Args) bool {
-	// send request using http or https, returns false if request failed
-	client := http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
-		Timeout:       time.Duration(args.Timeout * int(time.Second)),
-		Transport: &http.Transport{
-			ForceAttemptHTTP2:   true,
-			MaxIdleConns:        1000,
-			MaxIdleConnsPerHost: 500,
-			MaxConnsPerHost:     500,
-			DialContext: (&net.Dialer{
-				Timeout: time.Duration(args.Timeout * int(time.Second)),
-			}).DialContext,
-			TLSHandshakeTimeout: time.Duration(args.Timeout * int(time.Second)),
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				Renegotiation:      tls.RenegotiateOnceAsClient,
-				ServerName:         "",
-			},
-		},
-	}
-	parsedReq := ProcReqTemplate(reqTemplate, positions, args.RecursePosition)
-	req, err := http.NewRequest(parsedReq.Method, parsedReq.Url, bytes.NewBuffer([]byte(parsedReq.Body)))
-	if err != nil {
-		fmt.Println("Error making request")
-		os.Exit(1)
-	}
-	//add headers
-	headers := strings.Split(parsedReq.Headers, ",")
-	for _, header := range headers {
-		splitHeaders := strings.Split(header, ": ")
-		if len(splitHeaders) >= 2 {
-			if splitHeaders[0] == "Host" {
-				req.Host = splitHeaders[1]
-			} else {
-				req.Header.Set(splitHeaders[0], splitHeaders[1])
-			}
-		}
-	}
-	resp, err := client.Do(req)
-
-	recurse, code := IsRecurseHttp(resp, err)
-	// not an error created by 301 without Location header
-	if code == 0 && err != nil {
-		ErrorCounterInc()
-		return false
-	}
-
-	var respBodyText []byte
-	if resp != nil {
-		respBodyText, _ = ioutil.ReadAll(resp.Body)
-	}
-
-	processResp(code, recurse, positions, string(respBodyText), args)
-
-	return true
-}
-
-// processResp increments the progress counter and adds the directory to the queue if it is a web directory
-func processResp(code int, recurse bool, positions []string, resp string, args config.Args) {
-	CounterInc()
-
-	sizes := SizeRespBody(resp)
-	passed := CheckFound(code, sizes, args)
-
-	if passed {
-		displayPos := make([]string, len(positions))
-		copy(displayPos, positions)
-		displayPos[args.RecursePosition] = FrontierQ[0] + positions[args.RecursePosition]
-		fmt.Printf("\r%d - %s    Size:%d    Words:%d    Lines:%d                        \n", code, displayPos, sizes[0], sizes[1], sizes[2])
-		PrintProgress()
-	}
-
-	if recurse {
-		FrontierLock.Lock()
-		FrontierQ = append(FrontierQ, FrontierQ[0]+positions[args.RecursePosition]+args.RecurseDelimeter)
-		FrontierLock.Unlock()
-	}
-}
-
-// sendReq is a wrapper function for sendReqHttp and sendReqTcp.
-// It will retry failed requests a specified number of times.
-func sendReq(positionsChan chan []string, reqTemplate Request, reqFileContent string, tcpConn TcpAddress, args config.Args) {
-
+func sendReq(positionsChan chan []string, agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
 	// while receiving input on channel
 	for positions, ok := <-positionsChan; ok; positions, ok = <-positionsChan {
+		// just need a shallow copy since we are only copying timeout
+		tempArgs := args
+		tempArgs.Mc = args.Mc
+
 		//retry request x times unless it succeeds
 		success := false
 		r := args.Retry
-		for ; r > 0 && !success; r-- {
-			//request file is not set, use standard http mode
-			if reqFileContent == "" {
-				success = sendReqHttp(positions, reqTemplate, args)
-			} else { //send reqFile over tcp socket
-				success = sendReqTcp(positions, reqTemplate, reqFileContent, tcpConn, args)
-			}
-		}
+		var err error
+		var status bool
 
+		//request retry section
+		index := 1
+		for ; r >= 0 && !success; r-- {
+			if index > 1 {
+				fmt.Printf("Retrying ... %d\n", index)
+			}
+			// scale the timeout based on retry requests, starts with
+			if tempArgs.Retry > 0 {
+				tempArgs.Timeout = index * args.Timeout / tempArgs.Retry
+			}
+			status, err = agent.Send(positions, counter, tempArgs)
+			success = success || status
+			index = index + 1
+		}
+		if !success {
+			counter.ErrorCounterInc()
+			fmt.Println(err.Error())
+		} else {
+			counter.CounterInc()
+		}
 	}
 }
 
@@ -255,7 +132,7 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 
 // recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
 // calls procFiles to start sending data over the channels
-func recurseFuzz(reqTemplate Request, reqFileContent string, tcpConn TcpAddress, args config.Args) {
+func recurseFuzz(agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
 	for i := 0; i <= args.Depth && len(FrontierQ) > 0; i++ { // iteratively search web directories
 		reqChan := make(chan []string)
 		var wg sync.WaitGroup
@@ -263,10 +140,9 @@ func recurseFuzz(reqTemplate Request, reqFileContent string, tcpConn TcpAddress,
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				sendReq(reqChan, reqTemplate, reqFileContent, tcpConn, args)
+				sendReq(reqChan, agent, counter, args)
 			}()
 		}
-
 		procFiles(args.Files, nil, reqChan, args.Brute, args.E)
 		close(reqChan)
 		wg.Wait()
@@ -277,7 +153,7 @@ func recurseFuzz(reqTemplate Request, reqFileContent string, tcpConn TcpAddress,
 }
 
 // parseArgs processes and packs command line arguments into a struct
-func parseArgs(args []string) config.Args {
+func parseArgs(args []string) *config.Args {
 	var progArgs config.Args
 	flag.Usage = func() {
 		fmt.Println()
@@ -338,7 +214,7 @@ func parseArgs(args []string) config.Args {
 	flag.IntVar(&(progArgs.Retry), "retry", 3, "")
 	flag.Parse()
 	progArgs.Files = flag.Args()
-	return progArgs
+	return &progArgs
 }
 
 func loadDefaults(args *config.Args) {
@@ -358,10 +234,9 @@ func main() {
 	banner()
 
 	args := parseArgs(os.Args)
-	loadDefaults(&args)
+	loadDefaults(args)
 
 	//load request file contents
-	var tcpConn TcpAddress
 	reqFileContent := ""
 	if args.ReqFile != "" {
 		fileBytes, err := ioutil.ReadFile(args.ReqFile)
@@ -370,16 +245,8 @@ func main() {
 			os.Exit(1)
 		}
 		reqFileContent = RemoveTrailingNewline(string(fileBytes))
-		tcpConn = UrlToTcpAddress(args.Url)
 	}
-
-	// create request template from command line args
-	reqTemplate := Request{
-		Url:     args.Url,
-		Method:  args.Method,
-		Headers: strings.Join(args.Headers, ","),
-		Body:    args.Data,
-	}
+	args.Timeout = args.Timeout * int(time.Second)
 	// apply filter codes
 	args.Mc = SetDif(args.Mc, args.Fc)
 	// parse user supplied extensions
@@ -389,8 +256,17 @@ func main() {
 		args.E = append(args.E, "")
 	}
 	TotalJobs = GetNumJobs(args.Files, args.Brute, args.E)
-	go PrintProgressLoop()
-	recurseFuzz(reqTemplate, reqFileContent, tcpConn, args)
-	PrintProgress()
+
+	var agent reqagent.ReqAgent
+	if reqFileContent != "" { // initialize as tcp or http agent
+		agent = reqagent.NewReqAgentTcp(reqFileContent, args.Url)
+	} else {
+		agent = reqagent.NewReqAgentHttp(args.Url, args.Method, strings.Join(args.Headers, ","), args.Data)
+	}
+
+	counter := NewCounter()
+	go PrintProgressLoop(counter)
+	recurseFuzz(agent, counter, args)
+	PrintProgress(counter)
 	fmt.Println()
 }
