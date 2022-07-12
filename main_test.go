@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/wadeking98/gohammer/config"
-	. "github.com/wadeking98/gohammer/utils"
+	"github.com/wadeking98/gohammer/utils"
+	reqagent "github.com/wadeking98/gohammer/utils/reqAgent"
 )
 
 var httpChan chan string = make(chan string)
@@ -46,8 +47,9 @@ func TestSetup(t *testing.T) {
 
 func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
-	// go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@", Headers: "Content-Type: @0@,Host: @0@@1@"}, "", TcpAddress{}, 10, []string{"200"}, 0, "", 5)
-	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@", Headers: "Content-Type: @0@,Host: @0@@1@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
+	agent := reqagent.NewReqAgentHttp("http://127.0.0.1:8080/@0@@1@", "POST", "Content-Type: @0@,Host: @0@@1@", "")
+	counter := utils.NewCounter()
+	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 0})
 	reqChan <- []string{"a", "b"}
 	close(reqChan)
 	urlResp := <-urlChan
@@ -65,30 +67,34 @@ func TestSendReq(t *testing.T) {
 
 }
 
-func TestProcReqTemplate(t *testing.T) {
-	parsed := ProcReqTemplate(Request{"GET@0@", "http://127.0.0.1/@0@@1@", "Content-Type: @0@,Host: @0@@1@", ""}, []string{"a", "b"}, 0)
-	if parsed.Method != "GETa" {
-		t.Fatal("Method Fuzzing Failed")
-	}
-	if parsed.Url != "http://127.0.0.1/ab" {
-		t.Fatal("URL Fuzzing Failed")
-	}
-	if parsed.Headers != "Content-Type: a,Host: ab" {
-		t.Fatal("Header Fuzzing Failed")
-	}
-}
+// func TestProcReqTemplate(t *testing.T) {
+// 	agent := reqagent.NewReqAgentHttp("http://127.0.0.1:8080/@0@@1@", "GET@0@", "Content-Type: @0@,Host: @0@@1@", "")
+// 	counter := utils.NewCounter()
+
+// 	parsed := ProcReqTemplate(Request{"GET@0@", "http://127.0.0.1/@0@@1@", "Content-Type: @0@,Host: @0@@1@", ""}, []string{"a", "b"}, 0)
+// 	if parsed.Method != "GETa" {
+// 		t.Fatal("Method Fuzzing Failed")
+// 	}
+// 	if parsed.Url != "http://127.0.0.1/ab" {
+// 		t.Fatal("URL Fuzzing Failed")
+// 	}
+// 	if parsed.Headers != "Content-Type: a,Host: ab" {
+// 		t.Fatal("Header Fuzzing Failed")
+// 	}
+// }
 
 func TestBrute(t *testing.T) {
 	reqChan := make(chan []string)
-	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
+	agent := reqagent.NewReqAgentHttp("http://127.0.0.1:8080/@0@@1@", "POST", "Content-Type: @0@,Host: @0@@1@", "")
+	counter := utils.NewCounter()
+	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 0})
 
-	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@@1@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
+	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 0})
 	procFiles([]string{"tests/a.txt", "tests/b.txt"}, nil, reqChan, false, []string{})
 	close(reqChan)
 	resp := []string{<-urlChan, <-urlChan}
 	test1 := false
 	test2 := false
-	// fmt.Println(resp)
 	for _, r := range resp {
 		if r == "/ac" {
 			test1 = true
@@ -103,8 +109,10 @@ func TestBrute(t *testing.T) {
 
 func TestExtensions(t *testing.T) {
 	reqChan := make(chan []string)
+	agent := reqagent.NewReqAgentHttp("http://127.0.0.1:8080/@0@_@1@", "POST", "Content-Type: @0@,Host: @0@@1@", "")
+	counter := utils.NewCounter()
 	for i := 0; i < 4; i++ {
-		go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/@0@_@1@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
+		go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 0})
 	}
 
 	procFiles([]string{"tests/a.txt", "tests/b.txt"}, nil, reqChan, false, []string{".txt", ".php"})
@@ -128,7 +136,9 @@ func TestExtensions(t *testing.T) {
 
 func TestPostData(t *testing.T) {
 	reqChan := make(chan []string)
-	go sendReq(reqChan, Request{Method: "POST", Url: "http://127.0.0.1:8080/data", Body: "test=hello@0@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 5})
+	agent := reqagent.NewReqAgentHttp("http://127.0.0.1:8080/data", "POST", "", "test=hello@0@")
+	counter := utils.NewCounter()
+	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "/", Retry: 0})
 	procFiles([]string{"tests/oneChar.txt"}, nil, reqChan, false, []string{""})
 	close(reqChan)
 	resp := <-bodyChan
@@ -140,9 +150,9 @@ func TestPostData(t *testing.T) {
 }
 
 func TestRecursion(t *testing.T) {
-	// argStruct{timeout: 10, mc: []string{"200"},recursePosition: 0, recurseDelimeter: "", retry: 5 }
-	// go recurseFuzz(1, 5, []string{"tests/oneChar.txt"}, false, Request{Method: "GET", Url: "http://127.0.0.1:8080/recurse/@0@"}, "", TcpAddress{}, []string{"200", "301"}, 2, 0, "/", nil, 5)
-	go recurseFuzz(Request{Method: "GET", Url: "http://127.0.0.1:8080/recurse/@0@"}, "", TcpAddress{}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
+	agent := reqagent.NewReqAgentHttp("http://127.0.0.1:8080/recurse/@0@", "GET", "", "")
+	counter := utils.NewCounter()
+	go recurseFuzz(agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200, 301}, RecursePosition: 0, Brute: true, Files: []string{"tests/oneChar.txt"}, Threads: 1, Depth: 2, RecurseDelimeter: "/", Retry: 0})
 	url1 := <-urlChan
 	url2 := <-urlChan
 	url3 := <-urlChan
@@ -152,35 +162,35 @@ func TestRecursion(t *testing.T) {
 	}
 }
 
-func TestNumJobs(t *testing.T) {
-	numJobsBrute := GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
-	numJobs := GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
-	if numJobs != 4 && numJobsBrute != 16 {
-		t.Fatal("Incorrect number of jobs")
-	}
-}
+// func TestNumJobs(t *testing.T) {
+// 	numJobsBrute := GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
+// 	numJobs := GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
+// 	if numJobs != 4 && numJobsBrute != 16 {
+// 		t.Fatal("Incorrect number of jobs")
+// 	}
+// }
 
-func TestUrlToTcp(t *testing.T) {
-	address := UrlToTcpAddress("https://regex101.com/")
-	if address.Port != 443 || !address.Ssl || address.Address != "regex101.com" {
-		t.Fatal("Incorrect URL Parsing")
-	}
+// func TestUrlToTcp(t *testing.T) {
+// 	address := UrlToTcpAddress("https://regex101.com/")
+// 	if address.Port != 443 || !address.Ssl || address.Address != "regex101.com" {
+// 		t.Fatal("Incorrect URL Parsing")
+// 	}
 
-	address = UrlToTcpAddress("https://127.0.0.1:8080/")
-	if address.Port != 8080 || !address.Ssl || address.Address != "127.0.0.1" {
-		t.Fatal("Incorrect URL Parsing")
-	}
+// 	address = UrlToTcpAddress("https://127.0.0.1:8080/")
+// 	if address.Port != 8080 || !address.Ssl || address.Address != "127.0.0.1" {
+// 		t.Fatal("Incorrect URL Parsing")
+// 	}
 
-	address = UrlToTcpAddress("http://0.0.0.0:8080/")
-	if address.Port != 8080 || address.Ssl || address.Address != "0.0.0.0" {
-		t.Fatal("Incorrect URL Parsing")
-	}
+// 	address = UrlToTcpAddress("http://0.0.0.0:8080/")
+// 	if address.Port != 8080 || address.Ssl || address.Address != "0.0.0.0" {
+// 		t.Fatal("Incorrect URL Parsing")
+// 	}
 
-	address = UrlToTcpAddress("http://localhost/")
-	if address.Port != 80 || address.Ssl || address.Address != "localhost" {
-		t.Fatal("Incorrect URL Parsing")
-	}
-}
+// 	address = UrlToTcpAddress("http://localhost/")
+// 	if address.Port != 80 || address.Ssl || address.Address != "localhost" {
+// 		t.Fatal("Incorrect URL Parsing")
+// 	}
+// }
 
 func TestReqFile(t *testing.T) {
 	fileBytes, err := ioutil.ReadFile("tests/req.txt")
@@ -188,9 +198,11 @@ func TestReqFile(t *testing.T) {
 		fmt.Println("Error: couldn't open file")
 	}
 	reqFileContent := string(fileBytes)
+	agent := reqagent.NewReqAgentTcp(reqFileContent, "http://127.0.0.1:8080/")
+	counter := utils.NewCounter()
 	//reset frontier
-	FrontierQ = []string{""}
-	go recurseFuzz(Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
+	utils.FrontierQ = [][]string{{""}}
+	go recurseFuzz(agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
 	url := <-urlChan
 	fmt.Println(url)
 	if url != "/tcp/c" {
@@ -201,8 +213,10 @@ func TestReqFile(t *testing.T) {
 	if err != nil {
 		fmt.Println("Error: couldn't open file")
 	}
-	reqFileContent = RemoveTrailingNewline(string(fileBytes))
-	go recurseFuzz(Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
+	reqFileContent = utils.RemoveTrailingNewline(string(fileBytes))
+	agent2 := reqagent.NewReqAgentTcp(reqFileContent, "http://127.0.0.1:8080/")
+	counter2 := utils.NewCounter()
+	go recurseFuzz(agent2, counter2, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
 	body := <-bodyChan
 	url = <-urlChan
 	if url != "/data/c" {
@@ -219,8 +233,9 @@ func TestRecursionTcp(t *testing.T) {
 		fmt.Println("Error: couldn't open file")
 	}
 	reqFileContent := string(fileBytes)
-
-	go recurseFuzz(Request{}, reqFileContent, TcpAddress{Address: "127.0.0.1", Port: 8080, Ssl: false}, config.Args{Timeout: 10, Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
+	agent := reqagent.NewReqAgentTcp(reqFileContent, "http://127.0.0.1:8080/")
+	counter := utils.NewCounter()
+	go recurseFuzz(agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200, 301}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
 	time.Sleep(1 * time.Second)
 	url1 := <-urlChan
 	url2 := <-urlChan

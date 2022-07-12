@@ -4,47 +4,22 @@ import (
 	"bufio"
 	"fmt"
 	"math"
-	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/wadeking98/gohammer/config"
 )
 
-var FrontierQ []string = []string{""}
+var FrontierQ [][]string = [][]string{{""}}
 var FrontierLock sync.Mutex
-
-var CounterAvg []int
-
-var Counter int = 0
-var CounterPrev int = 0
-var counterLock sync.Mutex
-
-var ErrorCounter int = 0
-var errorCounterLock sync.Mutex
 
 var TotalJobs int
 
-type Request struct {
-	Method  string
-	Url     string
-	Headers string
-	Body    string
-}
-
-type TcpAddress struct {
-	Address string
-	Port    int
-	Ssl     bool
-}
-
 // replacePosition scans a string for the position marker and replaces it with a word
 // from the corresponding wordlist
-func replacePosition(str string, positions []string, recursePos int) string {
+func ReplacePosition(str string, positions []string, recursePos int) string {
 	r, _ := regexp.Compile(`@(\d+)@`)
 	defer func() {
 		if r := recover(); r != nil {
@@ -61,7 +36,7 @@ func replacePosition(str string, positions []string, recursePos int) string {
 		}
 		baseStr := ""
 		if posIdx == recursePos {
-			baseStr = FrontierQ[0]
+			baseStr = strings.Join(FrontierQ[0], "")
 		}
 		str = strings.Replace(str, match[0], baseStr+positions[posIdx], -1)
 	}
@@ -69,178 +44,19 @@ func replacePosition(str string, positions []string, recursePos int) string {
 }
 
 // PrintProgressLoop prints the current progress to stdout every second and adds the current request/second to an array
-func PrintProgressLoop() {
+func PrintProgressLoop(counter *Counter) {
 	for {
 		time.Sleep(1 * time.Second)
-		CounterAvg = append(CounterAvg, Counter-CounterPrev)
-		CounterPrev = Counter
-		//use 3 second average
-		if len(CounterAvg) > 3 {
-			CounterAvg = CounterAvg[1:]
-		}
-		PrintProgress()
+		counter.UpdateAvg()
+		PrintProgress(counter)
 	}
 }
 
 // PrintProgress prints the formatted progress string to stdout and computes the request/second average using an array
 // populated by PrintProgressLoop
-func PrintProgress() {
-	avg := 0
-	sum := 0
-	for _, c := range CounterAvg {
-		sum += c
-	}
-	if len(CounterAvg) > 0 {
-		avg = sum / len(CounterAvg)
-	} else {
-		avg = Counter
-	}
-	fmt.Printf("\rProgress: %d/%d - %d/s - Errors: %d    \t", Counter, TotalJobs, avg, ErrorCounter)
-}
-
-// Checkfound returns true if a request passes all filters
-func CheckFound(codeNumber int, sizes []int, args config.Args) bool {
-	lengthCheck := passedLengthFilter(sizes, args)
-	codeCheck := checkCodeFound(codeNumber, args.Mc)
-
-	return lengthCheck && codeCheck
-}
-
-// passedLengthFilter takes the response sizes (chars, words, lines) respectively as an array and returns true if none of the
-// length filters captures a response length
-func passedLengthFilter(sizes []int, args config.Args) bool {
-	filterPassed := true
-	filters := [][]int{args.Fs, args.Fw, args.Fl}
-	for i, s := range sizes { //apply length filter to chars, words, lines
-		filterPassed = filterPassed && !lenFilterMatches(s, filters[i])
-		if !filterPassed {
-			break
-		}
-	}
-
-	return filterPassed
-}
-
-//lenFilterMatches returns true if the length is in the array of lengths
-func lenFilterMatches(length int, lengths []int) bool {
-	ret := false
-	if len(lengths) > 0 {
-		for _, s := range lengths {
-			if s == length {
-				ret = true
-				break
-			}
-		}
-	}
-	return ret
-}
-
-// CheckCodeFound determines if a response code is found based on match codes in the param (mc),
-// and logs it to stdout if it is found
-func checkCodeFound(codeNumber int, mc []int) bool {
-	mcFound := false
-	for _, i := range mc {
-		if codeNumber == i {
-			mcFound = true
-			break
-		}
-	}
-	return mcFound
-}
-
-// GetTcpRespCode parses the response code from a raw tcp response.
-// Returns the response code as a string
-func GetTcpRespCode(resp string) string {
-	respRx := regexp.MustCompile(`HTTP/\S+\s(\d+)`)
-	match := respRx.FindStringSubmatch(resp)
-	var code string
-	if match != nil {
-		code = match[1]
-	}
-	return code
-}
-
-// Converts a URL to an address for a tcp socket.
-// Returns a struct containing the address, port, and if tls is in use
-func UrlToTcpAddress(url string) TcpAddress {
-	// returns port number and if ssl is being used
-	ssl := false
-	var port int
-	var err error
-	var address string
-
-	//get port number
-	rxPort, _ := regexp.Compile(`:(\d+)`)
-	res := rxPort.FindStringSubmatch(url)
-	if res != nil {
-		portString := res[1]
-		port, err = strconv.Atoi(portString)
-		if err != nil {
-			fmt.Printf("Error invalid port: %s\n", portString)
-			os.Exit(1)
-		}
-	}
-
-	//get address
-	rxAddress, _ := regexp.Compile(`https?://([^:/]+)`)
-	addrMatch := rxAddress.FindStringSubmatch(url)
-	if addrMatch != nil {
-		address = addrMatch[1]
-	} else {
-		fmt.Printf("Could not parse URL Address %s\n", url)
-	}
-
-	//get ssl
-	if strings.HasPrefix(url, "https://") {
-		ssl = true
-		if port == 0 {
-			port = 443
-		}
-	} else if port == 0 {
-		port = 80
-	}
-
-	return TcpAddress{Address: address, Port: port, Ssl: ssl}
-}
-
-// CounterInc increments the request progress counter
-func CounterInc() {
-	counterLock.Lock()
-	Counter++
-	counterLock.Unlock()
-}
-
-// ErrorCounterInc increments the request error counter whenever a request fails
-func ErrorCounterInc() {
-	errorCounterLock.Lock()
-	ErrorCounter++
-	errorCounterLock.Unlock()
-}
-
-// ProcReqTemplate applies words from a set of wordlists to a request template
-// Returns the parsed request template
-func ProcReqTemplate(req Request, positions []string, recursePos int) Request {
-	parsedReq := req
-	parsedReq.Url = replacePosition(parsedReq.Url, positions, recursePos)
-	parsedReq.Method = replacePosition(parsedReq.Method, positions, recursePos)
-	parsedReq.Headers = replacePosition(parsedReq.Headers, positions, recursePos)
-	parsedReq.Body = replacePosition(parsedReq.Body, positions, recursePos)
-	return parsedReq
-}
-
-// TcpRespToRespBody parses response body from tcp response
-func TcpRespToRespBody(resp string) string {
-	rx := regexp.MustCompile(`(?msi)\r\n\r\n(.*)`)
-	matched := rx.FindStringSubmatch(resp)
-	if len(matched) <= 1 {
-		return ""
-	}
-	return matched[1]
-}
-
-// SizeRespBody takes a given response body and returns the number of chars, words, and lines respectively
-func SizeRespBody(resp string) []int {
-	return []int{len(strings.Split(resp, "")), len(strings.Split(resp, " ")), len(strings.Split(resp, "\n"))}
+func PrintProgress(counter *Counter) {
+	avg := counter.GetCountAvg()
+	fmt.Printf("\r\033[KProgress: %d/%d - %d/s - Errors: %d", counter.GetCountNum(), TotalJobs, avg, counter.GetErrorNum())
 }
 
 // RemoveTrailingNewLine corrects the request file. Some text editors add a trailing new line to a file after saving.
@@ -252,69 +68,6 @@ func RemoveTrailingNewline(req string) string {
 		fixedReq = fixedReq[:len(fixedReq)-2]
 	}
 	return fixedReq
-}
-
-// ProcTcpReqTemplate corrects the Content-Length header when sending http post data
-func ProcTcpReqTemplate(req string, positions []string, recursePos int) string {
-	parsedReq := replacePosition(req, positions, recursePos)
-	contLenRx := regexp.MustCompile(`(?mi)Content-Length: \d+\r\n\r\n(.*)`)
-	res := contLenRx.FindStringSubmatch(parsedReq)
-	if res != nil {
-		postCont := res[1]
-		contLen := len(postCont)
-		contLenReplRx := regexp.MustCompile(`(?mi)Content-Length: \d+`)
-		parsedReq = contLenReplRx.ReplaceAllString(parsedReq, fmt.Sprintf("Content-Length: %d", contLen))
-	}
-	return parsedReq
-}
-
-// IsRecurseHttp determines if a given http response signifies a web directory
-// Returns a tuple containing the bool that tells if the response is from a web directory, and the status code of the http response
-func IsRecurseHttp(resp *http.Response, err error) (bool, int) {
-	var code int
-	if err != nil {
-		if strings.HasSuffix(err.Error(), "response missing Location header") {
-			rx := regexp.MustCompile(`(\d+) response missing Location header`)
-			res := rx.FindStringSubmatch(err.Error())
-			codeString := res[1]
-			code, err = strconv.Atoi(codeString)
-			if err != nil {
-				fmt.Printf("Error converting response code %s to integer\n", codeString)
-				return false, 0
-			}
-		}
-	} else {
-		code = resp.StatusCode
-	}
-	recurse := isRecurse(code)
-	return recurse, code
-}
-
-// IsRecurseTcp determines if a given tcp response signifies a web directory
-// Returns a tuple containing the boolean that tells if the response is from a web directory, and the status code of the http response
-func IsRecurseTcp(resp string) (bool, int) {
-	codeString := GetTcpRespCode(resp)
-	code, err := strconv.Atoi(codeString)
-	if err != nil {
-		fmt.Printf("Error converting response code %s to integer\n", codeString)
-		return false, 0
-	}
-	recurse := isRecurse(code)
-	return recurse, code
-}
-
-// isRecurse determines if the response codes signify a web directory
-// Returns true if the response code is from a web directory
-func isRecurse(code int) bool {
-	codes := []int{301, 302, 303, 307, 308}
-	ret := false
-	for _, c := range codes {
-		if c == code {
-			ret = true
-			break
-		}
-	}
-	return ret
 }
 
 // SetDif determines the set difference of two arrays
@@ -363,7 +116,6 @@ func GetNumJobs(fnames []string, brute bool, extensions []string) int {
 	}
 	// extensions will always have at least one element in it (the empty extension: '')
 	numJobs *= len(extensions)
-
 	return numJobs
 }
 
