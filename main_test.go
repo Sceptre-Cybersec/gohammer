@@ -201,7 +201,7 @@ func TestReqFile(t *testing.T) {
 	agent := reqagent.NewReqAgentTcp(reqFileContent, "http://127.0.0.1:8080/")
 	counter := utils.NewCounter()
 	//reset frontier
-	utils.FrontierQ = []string{""}
+	utils.FrontierQ = [][]string{{""}}
 	go recurseFuzz(agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
 	url := <-urlChan
 	fmt.Println(url)

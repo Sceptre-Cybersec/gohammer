@@ -49,6 +49,12 @@ func (c *Counter) GetErrorNum() int {
 	return c.errorCounter
 }
 
+func (c *Counter) Reset() {
+	c.counterLock.Lock()
+	c.counter = 0
+	c.counterLock.Unlock()
+}
+
 // CounterInc increments the request progress counter
 func (c *Counter) CounterInc() {
 	c.counterLock.Lock()

@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var FrontierQ []string = []string{""}
+var FrontierQ [][]string = [][]string{{""}}
 var FrontierLock sync.Mutex
 
 var TotalJobs int
@@ -36,7 +36,7 @@ func ReplacePosition(str string, positions []string, recursePos int) string {
 		}
 		baseStr := ""
 		if posIdx == recursePos {
-			baseStr = FrontierQ[0]
+			baseStr = strings.Join(FrontierQ[0], "")
 		}
 		str = strings.Replace(str, match[0], baseStr+positions[posIdx], -1)
 	}
@@ -56,7 +56,7 @@ func PrintProgressLoop(counter *Counter) {
 // populated by PrintProgressLoop
 func PrintProgress(counter *Counter) {
 	avg := counter.GetCountAvg()
-	fmt.Printf("\rProgress: %d/%d - %d/s - Errors: %d    \t", counter.GetCountNum(), TotalJobs, avg, counter.GetErrorNum())
+	fmt.Printf("\r\033[KProgress: %d/%d - %d/s - Errors: %d", counter.GetCountNum(), TotalJobs, avg, counter.GetErrorNum())
 }
 
 // RemoveTrailingNewLine corrects the request file. Some text editors add a trailing new line to a file after saving.

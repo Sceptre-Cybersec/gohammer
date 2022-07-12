@@ -13,16 +13,13 @@ import (
 	"github.com/wadeking98/gohammer/config"
 	"github.com/wadeking98/gohammer/utils"
 	reqagent "github.com/wadeking98/gohammer/utils/reqAgent"
-
-	. "github.com/wadeking98/gohammer/utils"
 )
 
 func sendReq(positionsChan chan []string, agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
 	// while receiving input on channel
 	for positions, ok := <-positionsChan; ok; positions, ok = <-positionsChan {
 		// just need a shallow copy since we are only copying timeout
-		tempArgs := args
-		tempArgs.Mc = args.Mc
+		tempArgs := *args
 
 		//retry request x times unless it succeeds
 		success := false
@@ -33,17 +30,15 @@ func sendReq(positionsChan chan []string, agent reqagent.ReqAgent, counter *util
 		//request retry section
 		index := 1
 		for ; r >= 0 && !success; r-- {
-			if index > 1 {
-				fmt.Printf("Retrying ... %d\n", index)
-			}
 			// scale the timeout based on retry requests, starts with
 			if tempArgs.Retry > 0 {
 				tempArgs.Timeout = index * args.Timeout / tempArgs.Retry
 			}
-			status, err = agent.Send(positions, counter, tempArgs)
+			status, err = agent.Send(positions, counter, &tempArgs)
 			success = success || status
 			index = index + 1
 		}
+		// fmt.Println(index)
 		if !success {
 			counter.ErrorCounterInc()
 			fmt.Println(err.Error())
@@ -133,22 +128,33 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 // recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
 // calls procFiles to start sending data over the channels
 func recurseFuzz(agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
-	for i := 0; i <= args.Depth && len(FrontierQ) > 0; i++ { // iteratively search web directories
-		reqChan := make(chan []string)
-		var wg sync.WaitGroup
-		for i := 0; i < args.Threads; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				sendReq(reqChan, agent, counter, args)
-			}()
+	for i := 0; len(utils.FrontierQ) > 0; i++ { // iteratively search web directories
+		if len(utils.FrontierQ[0])-1 > args.Depth && args.Depth > 0 {
+			if args.Depth > 1 { //if recursion is on then display message
+				fmt.Printf("\r\033[KSkipping Recursion Job Due to Depth Exceeded on: %s\n", strings.Join(utils.FrontierQ[0], ""))
+			}
+		} else {
+			if i > 0 {
+				// fmt.Print("\r\033[K\n")
+				fmt.Printf("\r\033[KStarting Recursion Job on: %s\n", strings.Join(utils.FrontierQ[0], ""))
+				counter.Reset()
+			}
+			reqChan := make(chan []string)
+			var wg sync.WaitGroup
+			for i := 0; i < args.Threads; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					sendReq(reqChan, agent, counter, args)
+				}()
+			}
+			procFiles(args.Files, nil, reqChan, args.Brute, args.E)
+			close(reqChan)
+			wg.Wait()
 		}
-		procFiles(args.Files, nil, reqChan, args.Brute, args.E)
-		close(reqChan)
-		wg.Wait()
-		FrontierLock.Lock()
-		FrontierQ = FrontierQ[1:]
-		FrontierLock.Unlock()
+		utils.FrontierLock.Lock()
+		utils.FrontierQ = utils.FrontierQ[1:]
+		utils.FrontierLock.Unlock()
 	}
 }
 
@@ -172,7 +178,7 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("-retry\tThe number of times to retry a failed request before giving up [Default:3]")
 		fmt.Println()
 		fmt.Println("Recursion Options:")
-		fmt.Println("-rd\tThe recursion depth of the search [Default:0]")
+		fmt.Println("-rd\tThe recursion depth of the search. Set to 0 for unlimited recursion [Default:1]")
 		fmt.Println("-rp\tThe position to recurse on [Default:0]")
 		fmt.Println("-rdl\tThe string to append to the base string when recursing [Default:'/']")
 		fmt.Println()
@@ -198,7 +204,7 @@ func parseArgs(args []string) *config.Args {
 	flag.StringVar(&(progArgs.Data), "d", "", "")
 	flag.IntVar(&(progArgs.Threads), "t", 10, "")
 	flag.StringVar(&(progArgs.ReqFile), "f", "", "")
-	flag.IntVar(&(progArgs.Depth), "rd", 0, "")
+	flag.IntVar(&(progArgs.Depth), "rd", 1, "")
 	flag.IntVar(&(progArgs.RecursePosition), "rp", 0, "")
 	flag.StringVar(&(progArgs.RecurseDelimeter), "rdl", "/", "")
 	flag.Var(&(progArgs.Headers), "H", "")
@@ -244,18 +250,18 @@ func main() {
 			fmt.Printf("Error: couldn't open %s\n", args.ReqFile)
 			os.Exit(1)
 		}
-		reqFileContent = RemoveTrailingNewline(string(fileBytes))
+		reqFileContent = utils.RemoveTrailingNewline(string(fileBytes))
 	}
 	args.Timeout = args.Timeout * int(time.Second)
 	// apply filter codes
-	args.Mc = SetDif(args.Mc, args.Fc)
+	args.Mc = utils.SetDif(args.Mc, args.Fc)
 	// parse user supplied extensions
 	// if no extensions then "" gets added anyway
 	if len(args.E) <= 0 {
 		//add blank extension
 		args.E = append(args.E, "")
 	}
-	TotalJobs = GetNumJobs(args.Files, args.Brute, args.E)
+	utils.TotalJobs = utils.GetNumJobs(args.Files, args.Brute, args.E)
 
 	var agent reqagent.ReqAgent
 	if reqFileContent != "" { // initialize as tcp or http agent
@@ -264,9 +270,9 @@ func main() {
 		agent = reqagent.NewReqAgentHttp(args.Url, args.Method, strings.Join(args.Headers, ","), args.Data)
 	}
 
-	counter := NewCounter()
-	go PrintProgressLoop(counter)
+	counter := utils.NewCounter()
+	go utils.PrintProgressLoop(counter)
 	recurseFuzz(agent, counter, args)
-	PrintProgress(counter)
+	utils.PrintProgress(counter)
 	fmt.Println()
 }

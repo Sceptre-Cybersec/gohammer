@@ -83,9 +83,9 @@ func (resp *Resp) ProcessResp(positions []string, counter *Counter, args *config
 	if passed {
 		displayPos := make([]string, len(positions))
 		copy(displayPos, positions)
-		displayPos[args.RecursePosition] = FrontierQ[0] + positions[args.RecursePosition]
+		displayPos[args.RecursePosition] = strings.Join(FrontierQ[0], "") + positions[args.RecursePosition]
 		fmt.Printf(
-			"\r%d - %s    Size:%d    Words:%d    Lines:%d    Time:%dms                    \n",
+			"\r\033[K%d - %s\t\tSize:%d\t    Words:%d\t    Lines:%d\t    Time:%dms\n",
 			resp.Code, displayPos, resp.Size, resp.Words, resp.Lines, resp.Time,
 		)
 		PrintProgress(counter)
@@ -93,7 +93,8 @@ func (resp *Resp) ProcessResp(positions []string, counter *Counter, args *config
 
 	if resp.IsRecurse() {
 		FrontierLock.Lock()
-		FrontierQ = append(FrontierQ, FrontierQ[0]+positions[args.RecursePosition]+args.RecurseDelimeter)
+		// add current position to base string of Frontier[0] and add it to the frontier
+		FrontierQ = append(FrontierQ, append(FrontierQ[0], positions[args.RecursePosition]+args.RecurseDelimeter))
 		FrontierLock.Unlock()
 	}
 }

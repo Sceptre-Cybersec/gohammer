@@ -2,6 +2,8 @@ package reqagent
 
 import (
 	"bytes"
+	"context"
+
 	// "crypto/tls"
 	"fmt"
 	// "net"
@@ -53,10 +55,14 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 	// }
 	client := http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
-		Timeout:       time.Duration(args.Timeout),
 	}
 	procReq := procReqTemplate(req, positions, args)
 	reqTemplate, err := http.NewRequest(procReq.method, procReq.url, bytes.NewBuffer([]byte(procReq.body)))
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, time.Duration(args.Timeout))
+	defer cancel()
+	reqTemplate = reqTemplate.WithContext(ctx)
 	if err != nil {
 		fmt.Println("Error making request")
 		os.Exit(1)
@@ -76,6 +82,9 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 	start := time.Now()
 	resp, err := client.Do(reqTemplate)
 	elapsed := int(time.Since(start) / time.Millisecond)
+	if elapsed > args.Timeout {
+		fmt.Printf("Elapsed: %d    \tTimeout:%d\n", elapsed, args.Timeout)
+	}
 	r := utils.NewRespFromHttp(resp, elapsed, err)
 	// not an error created by 301 without Location header
 	if r.Code == 0 && err != nil {
