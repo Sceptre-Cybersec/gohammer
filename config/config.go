@@ -57,7 +57,8 @@ type Args struct {
 	Threads          int
 	Method           string
 	ReqFile          string
-	Brute            bool
+	NoBrute          bool
+	Dos              bool
 	Headers          multiStringFlag
 	Files            []string
 	Mc               multiSplitIntFlag

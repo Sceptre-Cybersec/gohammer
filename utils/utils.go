@@ -20,13 +20,7 @@ var TotalJobs int
 // replacePosition scans a string for the position marker and replaces it with a word
 // from the corresponding wordlist
 func ReplacePosition(str string, positions []string, recursePos int) string {
-	r, _ := regexp.Compile(`@(\d+)@`)
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("Error: position number does not match number of files")
-			os.Exit(1)
-		}
-	}()
+	r := regexp.MustCompile(`@(\d+)@`)
 	res := r.FindAllStringSubmatch(str, -1)
 	for _, match := range res {
 		posIdx, err := strconv.Atoi(match[1])
@@ -38,25 +32,33 @@ func ReplacePosition(str string, positions []string, recursePos int) string {
 		if posIdx == recursePos {
 			baseStr = strings.Join(FrontierQ[0], "")
 		}
-		str = strings.Replace(str, match[0], baseStr+positions[posIdx], -1)
+		if len(positions) > posIdx {
+			str = strings.Replace(str, match[0], baseStr+positions[posIdx], -1)
+		}
 	}
 	return str
 }
 
 // PrintProgressLoop prints the current progress to stdout every second and adds the current request/second to an array
-func PrintProgressLoop(counter *Counter) {
+func PrintProgressLoop(counter *Counter, dos bool) {
 	for {
 		time.Sleep(1 * time.Second)
 		counter.UpdateAvg()
-		PrintProgress(counter)
+		PrintProgress(counter, dos)
 	}
 }
 
 // PrintProgress prints the formatted progress string to stdout and computes the request/second average using an array
 // populated by PrintProgressLoop
-func PrintProgress(counter *Counter) {
+func PrintProgress(counter *Counter, dos bool) {
 	avg := counter.GetCountAvg()
-	fmt.Printf("\r\033[KProgress: %d/%d - %d/s - Errors: %d", counter.GetCountNum(), TotalJobs, avg, counter.GetErrorNum())
+	var progressString string
+	if !dos {
+		progressString = fmt.Sprintf("\r\033[KProgress: %d/%d - %d/s - Errors: %d", counter.GetCountNum(), TotalJobs, avg, counter.GetErrorNum())
+	} else {
+		progressString = fmt.Sprintf("\r\033[KProgress: %d - %d/s - Errors: %d", counter.GetCountNum(), avg, counter.GetErrorNum())
+	}
+	fmt.Print(progressString)
 }
 
 // RemoveTrailingNewLine corrects the request file. Some text editors add a trailing new line to a file after saving.

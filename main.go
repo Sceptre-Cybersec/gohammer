@@ -16,8 +16,9 @@ import (
 )
 
 func sendReq(positionsChan chan []string, agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
+	positions, ok := <-positionsChan
 	// while receiving input on channel
-	for positions, ok := <-positionsChan; ok; positions, ok = <-positionsChan {
+	for ok {
 		// just need a shallow copy since we are only copying timeout
 		tempArgs := *args
 
@@ -45,6 +46,7 @@ func sendReq(positionsChan chan []string, agent reqagent.ReqAgent, counter *util
 		} else {
 			counter.CounterInc()
 		}
+		positions, ok = <-positionsChan
 	}
 }
 
@@ -65,11 +67,12 @@ func procExtensions(currString []string, extensions []string, reqChan chan []str
 }
 
 // procFiles opens user supplied wordlists and adds words from each wordlist to user specified positions
-func procFiles(fnames []string, currString []string, reqChan chan []string, brute bool, extensions []string) {
-	if brute { //use recursive strategy
+func procFiles(currString []string, reqChan chan []string, args *config.Args, index int) {
+	fnames := args.Files[index:]
+	if !args.NoBrute { //use recursive strategy
 		//send string to channel
 		if len(fnames) <= 0 {
-			procExtensions(currString, extensions, reqChan)
+			procExtensions(currString, args.E, reqChan)
 			return
 		}
 
@@ -84,7 +87,7 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 
 		for scanner.Scan() {
 			newString := append(currString, scanner.Text())
-			procFiles(fnames[1:], newString, reqChan, brute, extensions)
+			procFiles(newString, reqChan, args, index+1)
 		}
 	} else { // read all files line by line
 		var files []*os.File
@@ -119,7 +122,7 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 			}
 			// send line to requests
 			if !EOF {
-				procExtensions(currLine, extensions, reqChan)
+				procExtensions(currLine, args.E, reqChan)
 			}
 		}
 	}
@@ -129,7 +132,7 @@ func procFiles(fnames []string, currString []string, reqChan chan []string, brut
 // calls procFiles to start sending data over the channels
 func recurseFuzz(agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
 	for i := 0; len(utils.FrontierQ) > 0; i++ { // iteratively search web directories
-		if len(utils.FrontierQ[0])-1 > args.Depth && args.Depth > 0 {
+		if len(utils.FrontierQ[0]) > args.Depth && args.Depth > 0 {
 			if args.Depth > 1 { //if recursion is on then display message
 				fmt.Printf("\r\033[KSkipping Recursion Job Due to Depth Exceeded on: %s\n", strings.Join(utils.FrontierQ[0], ""))
 			}
@@ -148,7 +151,13 @@ func recurseFuzz(agent reqagent.ReqAgent, counter *utils.Counter, args *config.A
 					sendReq(reqChan, agent, counter, args)
 				}()
 			}
-			procFiles(args.Files, nil, reqChan, args.Brute, args.E)
+			if args.Dos {
+				for { //infinite loop for denial of service
+					procFiles(nil, reqChan, args, 0)
+				}
+			} else {
+				procFiles(nil, reqChan, args, 0)
+			}
 			close(reqChan)
 			wg.Wait()
 		}
@@ -176,9 +185,10 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("General Options:")
 		fmt.Println("-t\tThe number of concurrent threads [Default:10]")
 		fmt.Println("-retry\tThe number of times to retry a failed request before giving up [Default:3]")
+		fmt.Println("-dos\tRun a denial of service attack (for stress testing) [Default:false]")
 		fmt.Println()
 		fmt.Println("Recursion Options:")
-		fmt.Println("-rd\tThe recursion depth of the search. Set to 0 for unlimited recursion [Default:1]")
+		fmt.Println("-rd\tThe recursion depth of the search. Set to 0 for unlimited recursion, 1 for no recursion [Default:1]")
 		fmt.Println("-rp\tThe position to recurse on [Default:0]")
 		fmt.Println("-rdl\tThe string to append to the base string when recursing [Default:'/']")
 		fmt.Println()
@@ -209,15 +219,16 @@ func parseArgs(args []string) *config.Args {
 	flag.StringVar(&(progArgs.RecurseDelimeter), "rdl", "/", "")
 	flag.Var(&(progArgs.Headers), "H", "")
 	flag.StringVar(&(progArgs.Method), "method", "GET", "")
-	flag.BoolVar(&(progArgs.Brute), "brute", true, "")
-	flag.IntVar(&(progArgs.Timeout), "to", 5, "")
+	flag.BoolVar(&(progArgs.NoBrute), "no-brute", false, "")
+	flag.BoolVar(&(progArgs.Dos), "dos", false, "")
+	flag.IntVar(&(progArgs.Timeout), "to", 15, "")
 	flag.Var(&(progArgs.Mc), "mc", "")
 	flag.Var(&(progArgs.Fc), "fc", "")
 	flag.Var(&(progArgs.Fs), "fs", "")
 	flag.Var(&(progArgs.Fw), "fw", "")
 	flag.Var(&(progArgs.Fl), "fl", "")
 	flag.Var(&(progArgs.E), "e", "")
-	flag.IntVar(&(progArgs.Retry), "retry", 3, "")
+	flag.IntVar(&(progArgs.Retry), "retry", 25, "")
 	flag.Parse()
 	progArgs.Files = flag.Args()
 	return &progArgs
@@ -242,6 +253,11 @@ func main() {
 	args := parseArgs(os.Args)
 	loadDefaults(args)
 
+	if len(args.Files) <= 0 && !args.Dos {
+		fmt.Println("Please specify a wordlist unless you are using DOS mode")
+		os.Exit(1)
+	}
+
 	//load request file contents
 	reqFileContent := ""
 	if args.ReqFile != "" {
@@ -261,7 +277,10 @@ func main() {
 		//add blank extension
 		args.E = append(args.E, "")
 	}
-	utils.TotalJobs = utils.GetNumJobs(args.Files, args.Brute, args.E)
+
+	if !args.Dos {
+		utils.TotalJobs = utils.GetNumJobs(args.Files, args.NoBrute, args.E)
+	}
 
 	var agent reqagent.ReqAgent
 	if reqFileContent != "" { // initialize as tcp or http agent
@@ -271,8 +290,8 @@ func main() {
 	}
 
 	counter := utils.NewCounter()
-	go utils.PrintProgressLoop(counter)
+	go utils.PrintProgressLoop(counter, args.Dos)
 	recurseFuzz(agent, counter, args)
-	utils.PrintProgress(counter)
+	utils.PrintProgress(counter, args.Dos)
 	fmt.Println()
 }
