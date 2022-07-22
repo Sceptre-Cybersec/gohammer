@@ -80,7 +80,7 @@ func (resp *Resp) ProcessResp(positions []string, counter *Counter, args *config
 
 	filter := NewFilter(resp, args)
 	passed := filter.ApplyFilters(args)
-	if passed {
+	if passed && len(positions) > 0 {
 		displayPos := make([]string, len(positions))
 		copy(displayPos, positions)
 		displayPos[args.RecursePosition] = strings.Join(FrontierQ[0], "") + positions[args.RecursePosition]
@@ -88,7 +88,7 @@ func (resp *Resp) ProcessResp(positions []string, counter *Counter, args *config
 			"\r\033[K%d - %s\t\tSize:%d\t    Words:%d\t    Lines:%d\t    Time:%dms\n",
 			resp.Code, displayPos, resp.Size, resp.Words, resp.Lines, resp.Time,
 		)
-		PrintProgress(counter)
+		PrintProgress(counter, args.Dos)
 	}
 
 	if resp.IsRecurse() {

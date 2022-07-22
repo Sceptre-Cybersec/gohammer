@@ -11,8 +11,8 @@ After playing many hack the box machines and being frustrated with how hard it i
 - Supports request files captured by BurpSuite for a more flexible and easier fuzzing experience
 - Fuzz anything in the request, from headers to request methods to upload file content
 - Retry failed requests, never miss out on finding an important file due to a bad connection
+- DOS mode for stress testing
 - *Coming soon:* User configuration yaml file containing your desired default configuration so you don't have to look through your command line history to find you favourite command line parameters to use
-- *Coming soon:* DOS mode for stress testing
 
 ## Speed:
 The Speed varies depending on if you're fuzzing using the request file or not. Without using the request file the speed keeps up with ffuf and gobuster, but when using a request file the speed drops to about 50 requests per second using 32 threads. Additionally requests using the request file are a bit more prone to errors. Running through a wordlist of about 5000 words you can expect maybe about 3-4 errors. These requests usually still make it to the target though because they will be re-sent if they fail.
@@ -25,11 +25,17 @@ If you have GO installed:
 Simple web fuzzing:  
 > gohammer -u http://127.0.0.1/@0@ -t 32 -e .txt,.html,.php /home/me/myWordlist.txt  
   
+DOS mode:  
+> gohammer -u http://127.0.0.1/ -t 32 -dos  
+  
+DOS mode with wordlist:  
+> gohammer -u http://127.0.0.1/@0@ -t 32 -dos /home/me/myWordlist.txt
+  
 Bruteforce username and password:
 > gohammer -u https://some.site.com/ -method POST -d '{"user":"@0@", "password":"@1@"}' -t 32 /home/me/usernames.txt /home/me/passwords.txt  
   
 Bruteforce username and password using wordlists like a user:pass list  
-> gohammer -u https://some.site.com/ -method POST -d '{"user":"@0@", "password":"@1@"}' -t 32 -brute false /home/me/usernames.txt /home/me/passwords.txt  
+> gohammer -u https://some.site.com/ -method POST -d '{"user":"@0@", "password":"@1@"}' -t 32 -no-brute /home/me/usernames.txt /home/me/passwords.txt  
   
 Bruteforce username and password using request file:  
 > gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt
