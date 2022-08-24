@@ -68,6 +68,7 @@ type Args struct {
 	Fl               multiSplitIntFlag
 	Timeout          int
 	E                multiSplitStringFlag
+	Cap              string
 	Data             string
 	Depth            int
 	RecursePosition  int

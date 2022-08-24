@@ -85,7 +85,6 @@ func (req *ReqAgentTcp) Send(positions []string, counter *utils.Counter, args *c
 	if message == "" {
 		return false, nil
 	}
-
 	elapsed := int(time.Since(start) / time.Millisecond)
 	r := utils.NewRespFromTcp(message, elapsed)
 

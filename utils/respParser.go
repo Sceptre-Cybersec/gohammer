@@ -91,6 +91,11 @@ func (resp *Resp) ProcessResp(positions []string, counter *Counter, args *config
 		PrintProgress(counter, args.Dos)
 	}
 
+	if args.Cap != "" {
+		cap := NewCapture(resp, args)
+		cap.ApplyCapture()
+	}
+
 	if resp.IsRecurse() {
 		FrontierLock.Lock()
 		// add current position to base string of Frontier[0] and add it to the frontier
