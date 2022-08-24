@@ -30,7 +30,6 @@ func (c *Capture) ApplyCapture() {
 	}
 	body := c.response.Body
 	matches := re.FindAllString(body, -1)
-	fmt.Println(matches)
 	if matches != nil {
 		matchString := strings.Join(matches, "\n") + "\n"
 		f, err := os.OpenFile("cap.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
