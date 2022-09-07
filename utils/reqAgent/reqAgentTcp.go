@@ -1,8 +1,7 @@
 package reqagent
 
 import (
-	"bytes"
-	"context"
+	"bufio"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -13,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	ctxio "github.com/jbenet/go-context/io"
 	"github.com/wadeking98/gohammer/config"
 	"github.com/wadeking98/gohammer/utils"
 )
@@ -63,27 +61,18 @@ func (req *ReqAgentTcp) Send(positions []string, counter *utils.Counter, args *c
 	parsedReq := procTcpReqTemplate(req.rawReq, positions, args.RecursePosition)
 
 	start := time.Now()
-	_, err := fmt.Fprint(connClient, parsedReq)
-	if err != nil {
-		return false, err
-	}
+	fmt.Fprint(connClient, parsedReq)
 
 	//listen for reply and construct response
 	message := ""
 
-	var buf bytes.Buffer
-
-	ctx := context.Background()
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, time.Duration(args.Timeout))
-	defer cancel()
-	//read from buffer with timeout
-	connClientTimeout := ctxio.NewReader(ctx, connClient)
-	io.Copy(&buf, connClientTimeout)
-
-	message = buf.String()
-	if message == "" {
-		return false, nil
+	reader := bufio.NewReader(connClient)
+	for {
+		messageLine, err := reader.ReadString('\n')
+		if err == io.EOF {
+			break
+		}
+		message += messageLine
 	}
 	elapsed := int(time.Since(start) / time.Millisecond)
 	r := utils.NewRespFromTcp(message, elapsed)

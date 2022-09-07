@@ -12,7 +12,7 @@ type Filter struct {
 func NewFilter(resp *Resp, conf *config.Args) *Filter {
 	f := Filter{
 		response: resp,
-		filters:  []func(*Resp, *config.Args) bool{passedCodeFound, passedLengthFilter},
+		filters:  []func(*Resp, *config.Args) bool{passedCodeFound, passedLengthFilter, passedTimeFilter},
 	}
 	return &f
 }
@@ -25,6 +25,17 @@ func (f *Filter) ApplyFilters(args *config.Args) bool {
 		if !passed {
 			break
 		}
+	}
+	return passed
+}
+
+// passedTimeFilter determines if a request fails based on the time it took to reply
+func passedTimeFilter(resp *Resp, args *config.Args) bool {
+	passed := true
+	if args.Ft != 0 {
+		passed = resp.Time < args.Ft
+	} else if args.Mt != 0 {
+		passed = resp.Time >= args.Mt
 	}
 	return passed
 }

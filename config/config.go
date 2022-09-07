@@ -62,10 +62,12 @@ type Args struct {
 	Headers          multiStringFlag
 	Files            []string
 	Mc               multiSplitIntFlag
+	Mt               int
 	Fc               multiSplitIntFlag
 	Fs               multiSplitIntFlag
 	Fw               multiSplitIntFlag
 	Fl               multiSplitIntFlag
+	Ft               int
 	Timeout          int
 	E                multiSplitStringFlag
 	Cap              string
