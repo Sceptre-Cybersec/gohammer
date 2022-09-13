@@ -12,10 +12,9 @@ import (
 
 	"github.com/wadeking98/gohammer/config"
 	"github.com/wadeking98/gohammer/utils"
-	reqagent "github.com/wadeking98/gohammer/utils/reqAgent"
 )
 
-func sendReq(positionsChan chan []string, agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
+func sendReq(positionsChan chan []string, agent *utils.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
 	positions, ok := <-positionsChan
 	// while receiving input on channel
 	for ok {
@@ -130,7 +129,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 
 // recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
 // calls procFiles to start sending data over the channels
-func recurseFuzz(agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
+func recurseFuzz(agent *utils.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
 	for i := 0; len(utils.FrontierQ) > 0; i++ { // iteratively search web directories
 		if len(utils.FrontierQ[0]) > args.Depth && args.Depth > 0 {
 			if args.Depth > 1 { //if recursion is on then display message
@@ -290,11 +289,14 @@ func main() {
 		utils.TotalJobs = utils.GetNumJobs(args.Files, args.NoBrute, args.E)
 	}
 
-	var agent reqagent.ReqAgent
+	var agent *utils.ReqAgentHttp
 	if reqFileContent != "" { // initialize as tcp or http agent
-		agent = reqagent.NewReqAgentTcp(reqFileContent, args.Url)
+		if strings.HasSuffix(args.Url, "/") {
+			args.Url = args.Url[:len(args.Url)-1]
+		}
+		agent = utils.FileToRequest(reqFileContent, args.Url)
 	} else {
-		agent = reqagent.NewReqAgentHttp(args.Url, args.Method, strings.Join(args.Headers, ","), args.Data)
+		agent = utils.NewReqAgentHttp(args.Url, args.Method, strings.Join(args.Headers, "§"), args.Data)
 	}
 
 	counter := utils.NewCounter()

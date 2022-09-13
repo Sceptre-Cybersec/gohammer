@@ -1,8 +1,9 @@
-package reqagent
+package utils
 
 import (
 	"bytes"
 	"context"
+	"strconv"
 
 	// "crypto/tls"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/wadeking98/gohammer/config"
-	"github.com/wadeking98/gohammer/utils"
 )
 
 type ReqAgentHttp struct {
@@ -32,7 +32,23 @@ func NewReqAgentHttp(url string, method string, headers string, body string) *Re
 	}
 }
 
-func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *config.Args) (bool, error) {
+func (req *ReqAgentHttp) GetUrl() string {
+	return req.url
+}
+
+func (req *ReqAgentHttp) GetMethod() string {
+	return req.method
+}
+
+func (req *ReqAgentHttp) GetHeaders() string {
+	return req.headers
+}
+
+func (req *ReqAgentHttp) GetBody() string {
+	return req.body
+}
+
+func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config.Args) (bool, error) {
 	// send request using http or https, returns false if request failed
 	// client := http.Client{
 	// 	CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
@@ -68,24 +84,28 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 		os.Exit(1)
 	}
 	//add headers
-	headers := strings.Split(procReq.headers, ",")
+	headers := strings.Split(procReq.headers, "§")
 	for _, header := range headers {
 		splitHeaders := strings.Split(header, ": ")
 		if len(splitHeaders) >= 2 {
-			if splitHeaders[0] == "Host" {
+			if strings.EqualFold(splitHeaders[0], "Host") {
 				reqTemplate.Host = splitHeaders[1]
+			} else if strings.EqualFold(splitHeaders[0], "Content-Length") {
+				// adjust content length
+				reqTemplate.Header.Set(splitHeaders[0], strconv.Itoa(len(procReq.body)))
 			} else {
 				reqTemplate.Header.Set(splitHeaders[0], splitHeaders[1])
 			}
 		}
 	}
+
 	start := time.Now()
 	resp, err := client.Do(reqTemplate)
 	elapsed := int(time.Since(start) / time.Millisecond)
 	if elapsed > args.Timeout {
 		fmt.Printf("Elapsed: %d    \tTimeout:%d\n", elapsed, args.Timeout)
 	}
-	r := utils.NewRespFromHttp(resp, elapsed, err)
+	r := NewRespFromHttp(resp, elapsed, err)
 	// not an error created by 301 without Location header
 	if r.Code == 0 && err != nil {
 		return false, err
@@ -99,9 +119,9 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 // ProcReqTemplate applies words from a set of wordlists to a request template
 // Returns the parsed request template
 func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args) *ReqAgentHttp {
-	url := utils.ReplacePosition(reqAgent.url, positions, args.RecursePosition)
-	method := utils.ReplacePosition(reqAgent.method, positions, args.RecursePosition)
-	headers := utils.ReplacePosition(reqAgent.headers, positions, args.RecursePosition)
-	body := utils.ReplacePosition(reqAgent.body, positions, args.RecursePosition)
+	url := ReplacePosition(reqAgent.url, positions, args.RecursePosition)
+	method := ReplacePosition(reqAgent.method, positions, args.RecursePosition)
+	headers := ReplacePosition(reqAgent.headers, positions, args.RecursePosition)
+	body := ReplacePosition(reqAgent.body, positions, args.RecursePosition)
 	return NewReqAgentHttp(url, method, headers, body)
 }
