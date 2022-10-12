@@ -141,7 +141,7 @@ func recurseFuzz(agent *utils.ReqAgentHttp, counter *utils.Counter, args *config
 				fmt.Printf("\r\033[KStarting Recursion Job on: %s\n", strings.Join(utils.FrontierQ[0], ""))
 				counter.Reset()
 			}
-			reqChan := make(chan []string)
+			reqChan := make(chan []string, 1000)
 			var wg sync.WaitGroup
 			for i := 0; i < args.Threads; i++ {
 				wg.Add(1)
@@ -180,6 +180,7 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("-H\tList of headers, one per flag: -H 'Header1: value1' -H 'Header2: value2'")
 		fmt.Println("-to\tThe timeout for each web request [Default:5]")
 		fmt.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
+		fmt.Println("-proxy\tThe proxy to send the requests through [Default: no proxy]")
 		fmt.Println()
 		fmt.Println("General Options:")
 		fmt.Println("-t\tThe number of concurrent threads [Default:10]")
@@ -216,16 +217,22 @@ func parseArgs(args []string) *config.Args {
 
 	flag.StringVar(&(progArgs.Url), "u", "http://127.0.0.1/", "")
 	flag.StringVar(&(progArgs.Data), "d", "", "")
-	flag.IntVar(&(progArgs.Threads), "t", 10, "")
+	flag.StringVar(&(progArgs.Proxy), "proxy", "", "")
 	flag.StringVar(&(progArgs.ReqFile), "f", "", "")
+	flag.StringVar(&(progArgs.Method), "method", "GET", "")
+	flag.IntVar(&(progArgs.Timeout), "to", 15, "")
+	flag.Var(&(progArgs.Headers), "H", "")
+
+	flag.IntVar(&(progArgs.Threads), "t", 10, "")
+	flag.IntVar(&(progArgs.Retry), "retry", 3, "")
+	flag.BoolVar(&(progArgs.Dos), "dos", false, "")
+
 	flag.IntVar(&(progArgs.Depth), "rd", 1, "")
 	flag.IntVar(&(progArgs.RecursePosition), "rp", 0, "")
 	flag.StringVar(&(progArgs.RecurseDelimeter), "rdl", "/", "")
-	flag.Var(&(progArgs.Headers), "H", "")
-	flag.StringVar(&(progArgs.Method), "method", "GET", "")
+
 	flag.BoolVar(&(progArgs.NoBrute), "no-brute", false, "")
-	flag.BoolVar(&(progArgs.Dos), "dos", false, "")
-	flag.IntVar(&(progArgs.Timeout), "to", 15, "")
+
 	flag.Var(&(progArgs.Mc), "mc", "")
 	flag.IntVar(&(progArgs.Mt), "mt", 0, "")
 	flag.Var(&(progArgs.Fc), "fc", "")
@@ -235,7 +242,6 @@ func parseArgs(args []string) *config.Args {
 	flag.IntVar(&(progArgs.Ft), "ft", 0, "")
 	flag.Var(&(progArgs.E), "e", "")
 	flag.StringVar(&(progArgs.Cap), "capture", "", "")
-	flag.IntVar(&(progArgs.Retry), "retry", 25, "")
 	flag.Parse()
 	progArgs.Files = flag.Args()
 	return &progArgs
@@ -243,7 +249,7 @@ func parseArgs(args []string) *config.Args {
 
 func loadDefaults(args *config.Args) {
 	if len(args.Mc) <= 0 {
-		args.Mc.Set("200,204,301,302,303,307,308,401,403,405,500")
+		args.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
 	}
 }
 

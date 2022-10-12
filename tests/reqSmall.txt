@@ -1,0 +1,6 @@
+GET /@0@ HTTP/1.1
+Host: caddyserver.com
+User-Agent: Go-http-client/1.1
+Accept-Encoding: gzip, deflate
+Connection: close
+

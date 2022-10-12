@@ -3,12 +3,14 @@ package utils
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"strconv"
 
 	// "crypto/tls"
 	"fmt"
 	// "net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -72,6 +74,23 @@ func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config
 	client := http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
 	}
+
+	var transportConfig http.Transport
+	// add http proxy if exists
+	if args.Proxy != "" {
+		proxyUrl, err := url.Parse(args.Proxy)
+		if err != nil {
+			fmt.Printf("Error: invalid proxy url %s", args.Proxy)
+			os.Exit(1)
+		}
+		transportConfig.Proxy = http.ProxyURL(proxyUrl)
+	}
+
+	//disable ssl checking
+	transportConfig.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+	client.Transport = &transportConfig
+
 	procReq := procReqTemplate(req, positions, args)
 	reqTemplate, err := http.NewRequest(procReq.method, procReq.url, bytes.NewBuffer([]byte(procReq.body)))
 	ctx := context.Background()
