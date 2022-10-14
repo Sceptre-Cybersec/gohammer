@@ -51,26 +51,6 @@ func (req *ReqAgentHttp) GetBody() string {
 }
 
 func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config.Args) (bool, error) {
-	// send request using http or https, returns false if request failed
-	// client := http.Client{
-	// 	CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
-	// 	Timeout:       time.Duration(args.Timeout),
-	// 	Transport: &http.Transport{
-	// 		ForceAttemptHTTP2:   true,
-	// 		MaxIdleConns:        1000,
-	// 		MaxIdleConnsPerHost: 500,
-	// 		MaxConnsPerHost:     500,
-	// 		DialContext: (&net.Dialer{
-	// 			Timeout: time.Duration(args.Timeout),
-	// 		}).DialContext,
-	// 		TLSHandshakeTimeout: time.Duration(args.Timeout),
-	// 		TLSClientConfig: &tls.Config{
-	// 			InsecureSkipVerify: true,
-	// 			Renegotiation:      tls.RenegotiateOnceAsClient,
-	// 			ServerName:         "",
-	// 		},
-	// 	},
-	// }
 	client := http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
 	}
@@ -91,6 +71,7 @@ func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config
 
 	client.Transport = &transportConfig
 
+	// apply positions from wordlist to request template
 	procReq := procReqTemplate(req, positions, args)
 	reqTemplate, err := http.NewRequest(procReq.method, procReq.url, bytes.NewBuffer([]byte(procReq.body)))
 	ctx := context.Background()

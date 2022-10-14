@@ -180,7 +180,7 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("-H\tList of headers, one per flag: -H 'Header1: value1' -H 'Header2: value2'")
 		fmt.Println("-to\tThe timeout for each web request [Default:5]")
 		fmt.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
-		fmt.Println("-proxy\tThe proxy to send the requests through [Default: no proxy]")
+		fmt.Println("-proxy\tThe proxy to send the requests through: Example http://127.0.0.1:8080 [Default: no proxy]")
 		fmt.Println()
 		fmt.Println("General Options:")
 		fmt.Println("-t\tThe number of concurrent threads [Default:10]")
@@ -300,7 +300,7 @@ func main() {
 		if strings.HasSuffix(args.Url, "/") {
 			args.Url = args.Url[:len(args.Url)-1]
 		}
-		agent = utils.FileToRequest(reqFileContent, args.Url)
+		agent = utils.FileToRequestAgent(reqFileContent, args.Url)
 	} else {
 		agent = utils.NewReqAgentHttp(args.Url, args.Method, strings.Join(args.Headers, "§"), args.Data)
 	}

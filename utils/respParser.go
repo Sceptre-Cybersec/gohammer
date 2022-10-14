@@ -84,10 +84,7 @@ func (resp *Resp) ProcessResp(positions []string, counter *Counter, args *config
 		displayPos := make([]string, len(positions))
 		copy(displayPos, positions)
 		displayPos[args.RecursePosition] = strings.Join(FrontierQ[0], "") + positions[args.RecursePosition]
-		fmt.Printf(
-			"\r\033[K%d - %s\t\tSize:%d\t    Words:%d\t    Lines:%d\t    Time:%dms\n",
-			resp.Code, displayPos, resp.Size, resp.Words, resp.Lines, resp.Time,
-		)
+		fmt.Println(respLineFormatter(resp.Code, resp.Size, resp.Words, resp.Lines, resp.Time, displayPos, 12))
 		PrintProgress(counter, args.Dos)
 	}
 
@@ -102,6 +99,23 @@ func (resp *Resp) ProcessResp(positions []string, counter *Counter, args *config
 		FrontierQ = append(FrontierQ, append(FrontierQ[0], positions[args.RecursePosition]+args.RecurseDelimeter))
 		FrontierLock.Unlock()
 	}
+}
+
+// formats each column into equal width
+func respLineFormatter(code int, size int, words int, lines int, time int, display []string, colWidth int) string {
+	cols := [4]string{fmt.Sprintf("Size:%d", size), fmt.Sprintf("Words:%d", words), fmt.Sprintf("Lines:%d", lines), fmt.Sprintf("Time:%dms", time)}
+	resp := fmt.Sprintf("\r\033[K%d - ", code)
+	for _, col := range cols {
+		currLen := len([]rune(col))
+		remainingLength := colWidth - currLen
+		if remainingLength > 0 {
+			col += strings.Repeat(" ", remainingLength)
+		} else {
+			col += " "
+		}
+		resp += col
+	}
+	return fmt.Sprintf("%s- %s", resp, display)
 }
 
 // sizeRespBody fetches the size, words, and lines of each request

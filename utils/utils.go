@@ -39,7 +39,7 @@ func ReplacePosition(str string, positions []string, recursePos int) string {
 	return str
 }
 
-func FileToRequest(reqContent string, urlBase string) *ReqAgentHttp {
+func FileToRequestAgent(reqContent string, urlBase string) *ReqAgentHttp {
 	getMethod := regexp.MustCompile(`\S+`)
 	method := getMethod.FindString(reqContent)
 
