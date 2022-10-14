@@ -63,13 +63,14 @@ func FileToRequestAgent(reqContent string, urlBase string) *ReqAgentHttp {
 
 	getHeaders := regexp.MustCompile(`[\w-]+:\s.*`)
 	headersArr := getHeaders.FindAllString(parsedReqFile, -1)
-
 	// remove newlines from headers
-	headersJoined := strings.Join(headersArr, "§")
+	var cleanedHeaders []string
 	stripNL := regexp.MustCompile(`\r|\n`)
-	headers := stripNL.ReplaceAllString(headersJoined, "")
+	for _, header := range headersArr {
+		cleanedHeaders = append(cleanedHeaders, stripNL.ReplaceAllString(header, ""))
+	}
 
-	req := NewReqAgentHttp(path, method, headers, body)
+	req := NewReqAgentHttp(path, method, cleanedHeaders, body)
 
 	return req
 

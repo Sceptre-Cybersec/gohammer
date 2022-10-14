@@ -302,7 +302,7 @@ func main() {
 		}
 		agent = utils.FileToRequestAgent(reqFileContent, args.Url)
 	} else {
-		agent = utils.NewReqAgentHttp(args.Url, args.Method, strings.Join(args.Headers, "§"), args.Data)
+		agent = utils.NewReqAgentHttp(args.Url, args.Method, args.Headers, args.Data)
 	}
 
 	counter := utils.NewCounter()

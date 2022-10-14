@@ -21,11 +21,11 @@ import (
 type ReqAgentHttp struct {
 	url     string
 	method  string
-	headers string
+	headers []string
 	body    string
 }
 
-func NewReqAgentHttp(url string, method string, headers string, body string) *ReqAgentHttp {
+func NewReqAgentHttp(url string, method string, headers []string, body string) *ReqAgentHttp {
 	return &ReqAgentHttp{
 		url:     url,
 		method:  method,
@@ -42,7 +42,7 @@ func (req *ReqAgentHttp) GetMethod() string {
 	return req.method
 }
 
-func (req *ReqAgentHttp) GetHeaders() string {
+func (req *ReqAgentHttp) GetHeaders() []string {
 	return req.headers
 }
 
@@ -84,7 +84,7 @@ func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config
 		os.Exit(1)
 	}
 	//add headers
-	headers := strings.Split(procReq.headers, "§")
+	headers := procReq.headers
 	for _, header := range headers {
 		splitHeaders := strings.Split(header, ": ")
 		if len(splitHeaders) >= 2 {
@@ -121,7 +121,10 @@ func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config
 func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args) *ReqAgentHttp {
 	url := ReplacePosition(reqAgent.url, positions, args.RecursePosition)
 	method := ReplacePosition(reqAgent.method, positions, args.RecursePosition)
-	headers := ReplacePosition(reqAgent.headers, positions, args.RecursePosition)
+	var headers []string
+	for _, header := range reqAgent.headers {
+		headers = append(headers, ReplacePosition(header, positions, args.RecursePosition))
+	}
 	body := ReplacePosition(reqAgent.body, positions, args.RecursePosition)
 	return NewReqAgentHttp(url, method, headers, body)
 }
