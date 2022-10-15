@@ -39,7 +39,7 @@ func ReplacePosition(str string, positions []string, recursePos int) string {
 	return str
 }
 
-func FileToRequestAgent(reqContent string, urlBase string) *ReqAgentHttp {
+func FileToRequestAgent(reqContent string, urlBase string, proxy string) *ReqAgentHttp {
 	getMethod := regexp.MustCompile(`\S+`)
 	method := getMethod.FindString(reqContent)
 
@@ -70,7 +70,7 @@ func FileToRequestAgent(reqContent string, urlBase string) *ReqAgentHttp {
 		cleanedHeaders = append(cleanedHeaders, stripNL.ReplaceAllString(header, ""))
 	}
 
-	req := NewReqAgentHttp(path, method, cleanedHeaders, body)
+	req := NewReqAgentHttp(path, method, cleanedHeaders, body, proxy)
 
 	return req
 

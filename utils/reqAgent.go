@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"strconv"
 
 	// "crypto/tls"
@@ -18,58 +17,68 @@ import (
 	"github.com/wadeking98/gohammer/config"
 )
 
-type ReqAgentHttp struct {
+type ReqTemplate struct {
 	url     string
 	method  string
 	headers []string
 	body    string
 }
+type ReqAgentHttp struct {
+	template *ReqTemplate
+	client   *http.Client
+}
 
-func NewReqAgentHttp(url string, method string, headers []string, body string) *ReqAgentHttp {
-	return &ReqAgentHttp{
-		url:     url,
+func NewReqTemplate(reqUrl string, method string, headers []string, body string) *ReqTemplate {
+	return &ReqTemplate{
+		url:     reqUrl,
 		method:  method,
 		headers: headers,
 		body:    body,
 	}
 }
 
-func (req *ReqAgentHttp) GetUrl() string {
-	return req.url
-}
-
-func (req *ReqAgentHttp) GetMethod() string {
-	return req.method
-}
-
-func (req *ReqAgentHttp) GetHeaders() []string {
-	return req.headers
-}
-
-func (req *ReqAgentHttp) GetBody() string {
-	return req.body
-}
-
-func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config.Args) (bool, error) {
-	client := http.Client{
+func NewReqAgentHttp(reqUrl string, method string, headers []string, body string, proxy string) *ReqAgentHttp {
+	fmt.Println("HERE")
+	template := NewReqTemplate(reqUrl, method, headers, body)
+	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
 	}
 
 	var transportConfig http.Transport
 	// add http proxy if exists
-	if args.Proxy != "" {
-		proxyUrl, err := url.Parse(args.Proxy)
+	if proxy != "" {
+		proxyUrl, err := url.Parse(proxy)
 		if err != nil {
-			fmt.Printf("Error: invalid proxy url %s", args.Proxy)
+			fmt.Printf("Error: invalid proxy url %s", proxy)
 			os.Exit(1)
 		}
 		transportConfig.Proxy = http.ProxyURL(proxyUrl)
 	}
 
-	//disable ssl checking
-	transportConfig.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
 	client.Transport = &transportConfig
+	return &ReqAgentHttp{
+		template: template,
+		client:   client,
+	}
+}
+
+func (req *ReqAgentHttp) GetUrl() string {
+	return req.template.url
+}
+
+func (req *ReqAgentHttp) GetMethod() string {
+	return req.template.method
+}
+
+func (req *ReqAgentHttp) GetHeaders() []string {
+	return req.template.headers
+}
+
+func (req *ReqAgentHttp) GetBody() string {
+	return req.template.body
+}
+
+func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config.Args) (bool, error) {
 
 	// apply positions from wordlist to request template
 	procReq := procReqTemplate(req, positions, args)
@@ -100,7 +109,7 @@ func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config
 	}
 
 	start := time.Now()
-	resp, err := client.Do(reqTemplate)
+	resp, err := req.client.Do(reqTemplate)
 	elapsed := int(time.Since(start) / time.Millisecond)
 	if elapsed > args.Timeout {
 		fmt.Printf("Elapsed: %d    \tTimeout:%d\n", elapsed, args.Timeout)
@@ -118,13 +127,13 @@ func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config
 
 // ProcReqTemplate applies words from a set of wordlists to a request template
 // Returns the parsed request template
-func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args) *ReqAgentHttp {
-	url := ReplacePosition(reqAgent.url, positions, args.RecursePosition)
-	method := ReplacePosition(reqAgent.method, positions, args.RecursePosition)
+func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args) *ReqTemplate {
+	url := ReplacePosition(reqAgent.GetUrl(), positions, args.RecursePosition)
+	method := ReplacePosition(reqAgent.GetMethod(), positions, args.RecursePosition)
 	var headers []string
-	for _, header := range reqAgent.headers {
+	for _, header := range reqAgent.GetHeaders() {
 		headers = append(headers, ReplacePosition(header, positions, args.RecursePosition))
 	}
-	body := ReplacePosition(reqAgent.body, positions, args.RecursePosition)
-	return NewReqAgentHttp(url, method, headers, body)
+	body := ReplacePosition(reqAgent.GetBody(), positions, args.RecursePosition)
+	return NewReqTemplate(url, method, headers, body)
 }

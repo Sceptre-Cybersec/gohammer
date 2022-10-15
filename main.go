@@ -300,9 +300,9 @@ func main() {
 		if strings.HasSuffix(args.Url, "/") {
 			args.Url = args.Url[:len(args.Url)-1]
 		}
-		agent = utils.FileToRequestAgent(reqFileContent, args.Url)
+		agent = utils.FileToRequestAgent(reqFileContent, args.Url, args.Proxy)
 	} else {
-		agent = utils.NewReqAgentHttp(args.Url, args.Method, args.Headers, args.Data)
+		agent = utils.NewReqAgentHttp(args.Url, args.Method, args.Headers, args.Data, args.Proxy)
 	}
 
 	counter := utils.NewCounter()
