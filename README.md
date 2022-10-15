@@ -15,11 +15,14 @@ After playing many hack the box machines and being frustrated with how hard it i
 - *Coming soon:* User configuration yaml file containing your desired default configuration so you don't have to look through your command line history to find you favourite command line parameters to use
 
 ## Speed:
-The Speed varies depending on if you're fuzzing using the request file or not. Without using the request file the speed keeps up with ffuf and gobuster, but when using a request file the speed drops to about 50 requests per second using 32 threads. Additionally requests using the request file are a bit more prone to errors. Running through a wordlist of about 5000 words you can expect maybe about 3-4 errors. These requests usually still make it to the target though because they will be re-sent if they fail.
+Gohammer performs similarily to other fuzzing tools like ffuf and can reach speeds of 1000 requests pers second using 60 threads on some hosts.
+One thing to note while using the request file functionality is the `Connection: close` header. This header is there by default on most requests intercepted by
+BurpSuite from your browser. It will slow down fuzzing because it tells the host to close each TCP connection after returning an HTTP response. 
+For the fastest fuzzing using request files, remove the `Connection: close` header 
 
 ## Installation:
 If you have GO installed:  
-> go install github.com/wadeking98/gohammer  
+> go install github.com/wadeking98/gohammer@latest  
 
 ## Example Usage:
 Simple web fuzzing:  

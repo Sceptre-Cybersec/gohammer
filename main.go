@@ -12,10 +12,9 @@ import (
 
 	"github.com/wadeking98/gohammer/config"
 	"github.com/wadeking98/gohammer/utils"
-	reqagent "github.com/wadeking98/gohammer/utils/reqAgent"
 )
 
-func sendReq(positionsChan chan []string, agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
+func sendReq(positionsChan chan []string, agent *utils.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
 	positions, ok := <-positionsChan
 	// while receiving input on channel
 	for ok {
@@ -130,7 +129,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 
 // recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
 // calls procFiles to start sending data over the channels
-func recurseFuzz(agent reqagent.ReqAgent, counter *utils.Counter, args *config.Args) {
+func recurseFuzz(agent *utils.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
 	for i := 0; len(utils.FrontierQ) > 0; i++ { // iteratively search web directories
 		if len(utils.FrontierQ[0]) > args.Depth && args.Depth > 0 {
 			if args.Depth > 1 { //if recursion is on then display message
@@ -142,7 +141,7 @@ func recurseFuzz(agent reqagent.ReqAgent, counter *utils.Counter, args *config.A
 				fmt.Printf("\r\033[KStarting Recursion Job on: %s\n", strings.Join(utils.FrontierQ[0], ""))
 				counter.Reset()
 			}
-			reqChan := make(chan []string)
+			reqChan := make(chan []string, 1000)
 			var wg sync.WaitGroup
 			for i := 0; i < args.Threads; i++ {
 				wg.Add(1)
@@ -181,6 +180,7 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("-H\tList of headers, one per flag: -H 'Header1: value1' -H 'Header2: value2'")
 		fmt.Println("-to\tThe timeout for each web request [Default:5]")
 		fmt.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
+		fmt.Println("-proxy\tThe proxy to send the requests through: Example http://127.0.0.1:8080 [Default: no proxy]")
 		fmt.Println()
 		fmt.Println("General Options:")
 		fmt.Println("-t\tThe number of concurrent threads [Default:10]")
@@ -217,16 +217,22 @@ func parseArgs(args []string) *config.Args {
 
 	flag.StringVar(&(progArgs.Url), "u", "http://127.0.0.1/", "")
 	flag.StringVar(&(progArgs.Data), "d", "", "")
-	flag.IntVar(&(progArgs.Threads), "t", 10, "")
+	flag.StringVar(&(progArgs.Proxy), "proxy", "", "")
 	flag.StringVar(&(progArgs.ReqFile), "f", "", "")
+	flag.StringVar(&(progArgs.Method), "method", "GET", "")
+	flag.IntVar(&(progArgs.Timeout), "to", 15, "")
+	flag.Var(&(progArgs.Headers), "H", "")
+
+	flag.IntVar(&(progArgs.Threads), "t", 10, "")
+	flag.IntVar(&(progArgs.Retry), "retry", 3, "")
+	flag.BoolVar(&(progArgs.Dos), "dos", false, "")
+
 	flag.IntVar(&(progArgs.Depth), "rd", 1, "")
 	flag.IntVar(&(progArgs.RecursePosition), "rp", 0, "")
 	flag.StringVar(&(progArgs.RecurseDelimeter), "rdl", "/", "")
-	flag.Var(&(progArgs.Headers), "H", "")
-	flag.StringVar(&(progArgs.Method), "method", "GET", "")
+
 	flag.BoolVar(&(progArgs.NoBrute), "no-brute", false, "")
-	flag.BoolVar(&(progArgs.Dos), "dos", false, "")
-	flag.IntVar(&(progArgs.Timeout), "to", 15, "")
+
 	flag.Var(&(progArgs.Mc), "mc", "")
 	flag.IntVar(&(progArgs.Mt), "mt", 0, "")
 	flag.Var(&(progArgs.Fc), "fc", "")
@@ -236,7 +242,6 @@ func parseArgs(args []string) *config.Args {
 	flag.IntVar(&(progArgs.Ft), "ft", 0, "")
 	flag.Var(&(progArgs.E), "e", "")
 	flag.StringVar(&(progArgs.Cap), "capture", "", "")
-	flag.IntVar(&(progArgs.Retry), "retry", 25, "")
 	flag.Parse()
 	progArgs.Files = flag.Args()
 	return &progArgs
@@ -244,7 +249,7 @@ func parseArgs(args []string) *config.Args {
 
 func loadDefaults(args *config.Args) {
 	if len(args.Mc) <= 0 {
-		args.Mc.Set("200,204,301,302,303,307,308,401,403,405,500")
+		args.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
 	}
 }
 
@@ -290,11 +295,14 @@ func main() {
 		utils.TotalJobs = utils.GetNumJobs(args.Files, args.NoBrute, args.E)
 	}
 
-	var agent reqagent.ReqAgent
+	var agent *utils.ReqAgentHttp
 	if reqFileContent != "" { // initialize as tcp or http agent
-		agent = reqagent.NewReqAgentTcp(reqFileContent, args.Url)
+		if strings.HasSuffix(args.Url, "/") {
+			args.Url = args.Url[:len(args.Url)-1]
+		}
+		agent = utils.FileToRequestAgent(reqFileContent, args.Url, args.Proxy)
 	} else {
-		agent = reqagent.NewReqAgentHttp(args.Url, args.Method, strings.Join(args.Headers, ","), args.Data)
+		agent = utils.NewReqAgentHttp(args.Url, args.Method, args.Headers, args.Data, args.Proxy)
 	}
 
 	counter := utils.NewCounter()

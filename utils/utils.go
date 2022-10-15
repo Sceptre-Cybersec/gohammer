@@ -29,7 +29,7 @@ func ReplacePosition(str string, positions []string, recursePos int) string {
 			os.Exit(1)
 		}
 		baseStr := ""
-		if posIdx == recursePos {
+		if posIdx == recursePos && len(FrontierQ) > 0 {
 			baseStr = strings.Join(FrontierQ[0], "")
 		}
 		if len(positions) > posIdx {
@@ -37,6 +37,43 @@ func ReplacePosition(str string, positions []string, recursePos int) string {
 		}
 	}
 	return str
+}
+
+func FileToRequestAgent(reqContent string, urlBase string, proxy string) *ReqAgentHttp {
+	getMethod := regexp.MustCompile(`\S+`)
+	method := getMethod.FindString(reqContent)
+
+	getURL := regexp.MustCompile(`\S+\s(\S+)`)
+	pathGroups := getURL.FindStringSubmatch(reqContent)
+	if len(pathGroups) <= 1 {
+		fmt.Println("Error parsing url path from request file")
+		os.Exit(1)
+	}
+	path := urlBase + pathGroups[1]
+
+	getContent := regexp.MustCompile(`\r\n\r\n(.*)`)
+	bodyGroups := getContent.FindStringSubmatch(reqContent)
+	body := ""
+	if len(bodyGroups) > 1 {
+		body = bodyGroups[1]
+	}
+
+	// remove the body content
+	parsedReqFile := getContent.ReplaceAllString(reqContent, "")
+
+	getHeaders := regexp.MustCompile(`[\w-]+:\s.*`)
+	headersArr := getHeaders.FindAllString(parsedReqFile, -1)
+	// remove newlines from headers
+	var cleanedHeaders []string
+	stripNL := regexp.MustCompile(`\r|\n`)
+	for _, header := range headersArr {
+		cleanedHeaders = append(cleanedHeaders, stripNL.ReplaceAllString(header, ""))
+	}
+
+	req := NewReqAgentHttp(path, method, cleanedHeaders, body, proxy)
+
+	return req
+
 }
 
 // PrintProgressLoop prints the current progress to stdout every second and adds the current request/second to an array

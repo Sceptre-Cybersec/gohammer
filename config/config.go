@@ -54,6 +54,7 @@ func (m *multiSplitIntFlag) Set(value string) error {
 
 type Args struct {
 	Url              string
+	Proxy            string
 	Threads          int
 	Method           string
 	ReqFile          string
