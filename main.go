@@ -78,7 +78,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 
 		f, err := os.Open(fnames[0])
 		if err != nil {
-			fmt.Printf("Error opening %s", fnames[0])
+			fmt.Printf("Error opening %s\n", fnames[0])
 			os.Exit(1)
 		}
 		defer f.Close()
@@ -95,7 +95,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 		for _, fname := range fnames { //open all files
 			f, err := os.Open(fname)
 			if err != nil {
-				fmt.Printf("Error opening %s", fname)
+				fmt.Printf("Error opening %s\n", fname)
 				os.Exit(1)
 			}
 			files = append(files, f)
@@ -198,15 +198,19 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("-ms\tMatch http response by size")
 		fmt.Println("-mw\tMatch http response by number of words")
 		fmt.Println("-ml\tMatch http response by number of lines")
+		fmt.Println("-mr\tMatch http response by regular expression in response body")
 		fmt.Println("-mt\tMatch responses that take longer than or equal to the specified time in miliseconds")
 		fmt.Println("-fc\tThe http response codes to filter")
 		fmt.Println("-fs\tFilter http response by size")
 		fmt.Println("-fw\tFilter http response by number of words")
 		fmt.Println("-fl\tFilter http response by number of lines")
+		fmt.Println("-mr\tFilter http response by regular expression in response body")
 		fmt.Println("-ft\tFilter responses that take longer than or equal to the specified time in miliseconds")
 		fmt.Println()
 		fmt.Println("Capture Options:")
 		fmt.Println("-capture\tThe regular expression used to capture data from the response. Data is saved into cap.txt by default")
+		fmt.Println("-capture-group\tThe regular expression group to capture 0 is the whole match and 1 is the first group, 2 is the second, etc")
+		fmt.Println("-capture-file\tThe file to save the captured data [Default: 'cap.txt']")
 		fmt.Println()
 		fmt.Println("Wordlist Options:")
 		fmt.Println("-brute\tWhether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line. [Default:true]")
@@ -246,16 +250,18 @@ func parseArgs(args []string) *config.Args {
 	flag.Var(&(progArgs.FilterOptions.Ms), "ms", "")
 	flag.Var(&(progArgs.FilterOptions.Mw), "mw", "")
 	flag.Var(&(progArgs.FilterOptions.Ml), "ml", "")
+	flag.StringVar(&(progArgs.FilterOptions.Mr), "mr", "", "")
 	flag.IntVar(&(progArgs.FilterOptions.Mt), "mt", 0, "")
 	flag.Var(&(progArgs.FilterOptions.Fc), "fc", "")
 	flag.Var(&(progArgs.FilterOptions.Fs), "fs", "")
 	flag.Var(&(progArgs.FilterOptions.Fw), "fw", "")
 	flag.Var(&(progArgs.FilterOptions.Fl), "fl", "")
+	flag.StringVar(&(progArgs.FilterOptions.Fr), "fr", "", "")
 	flag.IntVar(&(progArgs.FilterOptions.Ft), "ft", 0, "")
 
 	// Capture Options
 	flag.StringVar(&(progArgs.CaptureOptions.Cap), "capture", "", "")
-	flag.Var(&(progArgs.CaptureOptions.CapGroups), "capture-groups", "")
+	flag.IntVar(&(progArgs.CaptureOptions.CapGroup), "capture-group", 0, "")
 	flag.StringVar(&(progArgs.CaptureOptions.CapFile), "capture-file", "cap.txt", "")
 	flag.Parse()
 	progArgs.WordlistOptions.Files = flag.Args()

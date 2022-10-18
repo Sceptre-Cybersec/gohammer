@@ -1,6 +1,10 @@
 package response
 
 import (
+	"fmt"
+	"os"
+	"regexp"
+
 	"github.com/wadeking98/gohammer/config"
 )
 
@@ -12,7 +16,7 @@ type Filter struct {
 func NewFilter(resp *Resp, conf *config.Args) *Filter {
 	f := Filter{
 		response: resp,
-		filters:  []func(*Resp, *config.Args) bool{passedCodeFound, passedLengthFilter, passedLengthMatch, passedTimeFilter},
+		filters:  []func(*Resp, *config.Args) bool{passedCodeFound, passedLengthFilter, passedLengthMatch, passedTimeFilter, passedRegexFilter, passedRegexMatch},
 	}
 	return &f
 }
@@ -51,6 +55,36 @@ func passedCodeFound(resp *Resp, args *config.Args) bool {
 		}
 	}
 	return mcFound
+}
+
+// passedRegexFilter returns true if the regex doesn't match the request body
+func passedRegexFilter(resp *Resp, args *config.Args) bool {
+	passed := true
+	if args.FilterOptions.Fr != "" {
+		filterRegex, err := regexp.Compile(args.FilterOptions.Fr)
+		if err != nil {
+			fmt.Println("Error: Invalid filter regular expression. Please use Golang style regular expressions")
+			os.Exit(1)
+		}
+		matchFound := filterRegex.MatchString(resp.Body)
+		passed = !matchFound
+	}
+	return passed
+}
+
+// passedRegexMatch returns true if the regex matches the request body
+func passedRegexMatch(resp *Resp, args *config.Args) bool {
+	passed := true
+	if args.FilterOptions.Mr != "" {
+		filterRegex, err := regexp.Compile(args.FilterOptions.Mr)
+		if err != nil {
+			fmt.Println("Error: Invalid filter regular expression. Please use Golang style regular expressions")
+			os.Exit(1)
+		}
+		matchFound := filterRegex.MatchString(resp.Body)
+		passed = matchFound
+	}
+	return passed
 }
 
 // passedLengthFilter takes the response sizes (chars, words, lines) respectively as an array and returns true if none of the

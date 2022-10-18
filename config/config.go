@@ -86,17 +86,19 @@ type FilterOptions struct {
 	Mw multiSplitIntFlag
 	Ml multiSplitIntFlag
 	Mt int
+	Mr string
 	Fc multiSplitIntFlag
 	Fs multiSplitIntFlag
 	Fw multiSplitIntFlag
 	Fl multiSplitIntFlag
 	Ft int
+	Fr string
 }
 
 type CaptureOptions struct {
-	Cap       string
-	CapGroups multiSplitIntFlag
-	CapFile   string
+	Cap      string
+	CapGroup int
+	CapFile  string
 }
 
 type Args struct {

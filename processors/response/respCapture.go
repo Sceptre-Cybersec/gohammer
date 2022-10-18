@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strings"
 
 	"github.com/wadeking98/gohammer/config"
 )
@@ -12,12 +11,16 @@ import (
 type Capture struct {
 	response  *Resp
 	capString string
+	capGroup  int
+	capFile   string
 }
 
 func NewCapture(resp *Resp, conf *config.Args) *Capture {
 	c := Capture{
 		response:  resp,
 		capString: conf.CaptureOptions.Cap,
+		capGroup:  conf.CaptureOptions.CapGroup,
+		capFile:   conf.CaptureOptions.CapFile,
 	}
 	return &c
 }
@@ -29,16 +32,21 @@ func (c *Capture) ApplyCapture() {
 		os.Exit(1)
 	}
 	body := c.response.Body
-	matches := re.FindAllString(body, -1)
+	matches := re.FindAllStringSubmatch(body, -1)
 	if matches != nil {
-		matchString := strings.Join(matches, "\n") + "\n"
-		f, err := os.OpenFile("cap.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-		if err != nil {
-			fmt.Println("Error creating capture file")
-			os.Exit(1)
-		}
-		defer f.Close()
+		for _, match := range matches {
+			if len(match) > c.capGroup {
+				matchString := match[c.capGroup] + "\n"
+				f, err := os.OpenFile("cap.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					fmt.Println(err.Error())
+					fmt.Println("Error creating capture file")
+					os.Exit(1)
+				}
+				defer f.Close()
 
-		f.WriteString(matchString)
+				f.WriteString(matchString)
+			}
+		}
 	}
 }

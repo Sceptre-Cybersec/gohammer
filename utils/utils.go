@@ -96,7 +96,7 @@ func GetNumJobs(fnames []string, brute bool, extensions []string) int {
 	for _, fname := range fnames {
 		f, err := os.Open(fname)
 		if err != nil {
-			fmt.Printf("Error opening %s", fnames[0])
+			fmt.Printf("Error opening %s\n", fnames[0])
 			os.Exit(1)
 		}
 		files = append(files, bufio.NewScanner(f))
