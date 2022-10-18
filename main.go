@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/wadeking98/gohammer/config"
+	"github.com/wadeking98/gohammer/processors/request"
 	"github.com/wadeking98/gohammer/utils"
 )
 
-func sendReq(positionsChan chan []string, agent *utils.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
+func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
 	positions, ok := <-positionsChan
 	// while receiving input on channel
 	for ok {
@@ -23,7 +24,7 @@ func sendReq(positionsChan chan []string, agent *utils.ReqAgentHttp, counter *ut
 
 		//retry request x times unless it succeeds
 		success := false
-		r := args.Retry
+		r := args.GeneralOptions.Retry
 		var err error
 		var status bool
 
@@ -31,8 +32,8 @@ func sendReq(positionsChan chan []string, agent *utils.ReqAgentHttp, counter *ut
 		index := 1
 		for ; r >= 0 && !success; r-- {
 			// scale the timeout based on retry requests, starts with
-			if tempArgs.Retry > 0 {
-				tempArgs.Timeout = index * args.Timeout / tempArgs.Retry
+			if tempArgs.GeneralOptions.Retry > 0 {
+				tempArgs.RequestOptions.Timeout = index * args.RequestOptions.Timeout / tempArgs.GeneralOptions.Retry
 			}
 			status, err = agent.Send(positions, counter, &tempArgs)
 			success = success || status
@@ -67,11 +68,11 @@ func procExtensions(currString []string, extensions []string, reqChan chan []str
 
 // procFiles opens user supplied wordlists and adds words from each wordlist to user specified positions
 func procFiles(currString []string, reqChan chan []string, args *config.Args, index int) {
-	fnames := args.Files[index:]
-	if !args.NoBrute { //use recursive strategy
+	fnames := args.WordlistOptions.Files[index:]
+	if !args.WordlistOptions.NoBrute { //use recursive strategy
 		//send string to channel
 		if len(fnames) <= 0 {
-			procExtensions(currString, args.E, reqChan)
+			procExtensions(currString, args.WordlistOptions.Extensions, reqChan)
 			return
 		}
 
@@ -121,7 +122,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 			}
 			// send line to requests
 			if !EOF {
-				procExtensions(currLine, args.E, reqChan)
+				procExtensions(currLine, args.WordlistOptions.Extensions, reqChan)
 			}
 		}
 	}
@@ -129,10 +130,10 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 
 // recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
 // calls procFiles to start sending data over the channels
-func recurseFuzz(agent *utils.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
+func recurseFuzz(agent *request.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
 	for i := 0; len(utils.FrontierQ) > 0; i++ { // iteratively search web directories
-		if len(utils.FrontierQ[0]) > args.Depth && args.Depth > 0 {
-			if args.Depth > 1 { //if recursion is on then display message
+		if len(utils.FrontierQ[0]) > args.RecursionOptions.Depth && args.RecursionOptions.Depth > 0 {
+			if args.RecursionOptions.Depth > 1 { //if recursion is on then display message
 				fmt.Printf("\r\033[KSkipping Recursion Job Due to Depth Exceeded on: %s\n", strings.Join(utils.FrontierQ[0], ""))
 			}
 		} else {
@@ -143,14 +144,14 @@ func recurseFuzz(agent *utils.ReqAgentHttp, counter *utils.Counter, args *config
 			}
 			reqChan := make(chan []string, 1000)
 			var wg sync.WaitGroup
-			for i := 0; i < args.Threads; i++ {
+			for i := 0; i < args.GeneralOptions.Threads; i++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
 					sendReq(reqChan, agent, counter, args)
 				}()
 			}
-			if args.Dos {
+			if args.GeneralOptions.Dos {
 				for { //infinite loop for denial of service
 					procFiles(nil, reqChan, args, 0)
 				}
@@ -194,6 +195,9 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println()
 		fmt.Println("Filter Options:")
 		fmt.Println("-mc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
+		fmt.Println("-ms\tMatch http response by size")
+		fmt.Println("-mw\tMatch http response by number of words")
+		fmt.Println("-ml\tMatch http response by number of lines")
 		fmt.Println("-mt\tMatch responses that take longer than or equal to the specified time in miliseconds")
 		fmt.Println("-fc\tThe http response codes to filter")
 		fmt.Println("-fs\tFilter http response by size")
@@ -214,42 +218,53 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("gohammer -u https://some.site.com/ -method POST -d '{\"user\":\"@0@\", \"password\":\"@1@\"}' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 		fmt.Println("gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 	}
+	// Request Options
+	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "http://127.0.0.1/", "")
+	flag.StringVar(&(progArgs.RequestOptions.Data), "d", "", "")
+	flag.StringVar(&(progArgs.RequestOptions.Proxy), "proxy", "", "")
+	flag.StringVar(&(progArgs.RequestOptions.ReqFile), "f", "", "")
+	flag.StringVar(&(progArgs.RequestOptions.Method), "method", "GET", "")
+	flag.IntVar(&(progArgs.RequestOptions.Timeout), "to", 15, "")
+	flag.Var(&(progArgs.RequestOptions.Headers), "H", "")
 
-	flag.StringVar(&(progArgs.Url), "u", "http://127.0.0.1/", "")
-	flag.StringVar(&(progArgs.Data), "d", "", "")
-	flag.StringVar(&(progArgs.Proxy), "proxy", "", "")
-	flag.StringVar(&(progArgs.ReqFile), "f", "", "")
-	flag.StringVar(&(progArgs.Method), "method", "GET", "")
-	flag.IntVar(&(progArgs.Timeout), "to", 15, "")
-	flag.Var(&(progArgs.Headers), "H", "")
+	// General Options
+	flag.IntVar(&(progArgs.GeneralOptions.Threads), "t", 10, "")
+	flag.IntVar(&(progArgs.GeneralOptions.Retry), "retry", 3, "")
+	flag.BoolVar(&(progArgs.GeneralOptions.Dos), "dos", false, "")
 
-	flag.IntVar(&(progArgs.Threads), "t", 10, "")
-	flag.IntVar(&(progArgs.Retry), "retry", 3, "")
-	flag.BoolVar(&(progArgs.Dos), "dos", false, "")
+	// Recursion Options
+	flag.IntVar(&(progArgs.RecursionOptions.Depth), "rd", 1, "")
+	flag.IntVar(&(progArgs.RecursionOptions.RecursePosition), "rp", 0, "")
+	flag.StringVar(&(progArgs.RecursionOptions.RecurseDelimeter), "rdl", "/", "")
 
-	flag.IntVar(&(progArgs.Depth), "rd", 1, "")
-	flag.IntVar(&(progArgs.RecursePosition), "rp", 0, "")
-	flag.StringVar(&(progArgs.RecurseDelimeter), "rdl", "/", "")
+	// Wordlist Options
+	flag.BoolVar(&(progArgs.WordlistOptions.NoBrute), "no-brute", false, "")
+	flag.Var(&(progArgs.WordlistOptions.Extensions), "e", "")
 
-	flag.BoolVar(&(progArgs.NoBrute), "no-brute", false, "")
+	// Filter Options
+	flag.Var(&(progArgs.FilterOptions.Mc), "mc", "")
+	flag.Var(&(progArgs.FilterOptions.Ms), "ms", "")
+	flag.Var(&(progArgs.FilterOptions.Mw), "mw", "")
+	flag.Var(&(progArgs.FilterOptions.Ml), "ml", "")
+	flag.IntVar(&(progArgs.FilterOptions.Mt), "mt", 0, "")
+	flag.Var(&(progArgs.FilterOptions.Fc), "fc", "")
+	flag.Var(&(progArgs.FilterOptions.Fs), "fs", "")
+	flag.Var(&(progArgs.FilterOptions.Fw), "fw", "")
+	flag.Var(&(progArgs.FilterOptions.Fl), "fl", "")
+	flag.IntVar(&(progArgs.FilterOptions.Ft), "ft", 0, "")
 
-	flag.Var(&(progArgs.Mc), "mc", "")
-	flag.IntVar(&(progArgs.Mt), "mt", 0, "")
-	flag.Var(&(progArgs.Fc), "fc", "")
-	flag.Var(&(progArgs.Fs), "fs", "")
-	flag.Var(&(progArgs.Fw), "fw", "")
-	flag.Var(&(progArgs.Fl), "fl", "")
-	flag.IntVar(&(progArgs.Ft), "ft", 0, "")
-	flag.Var(&(progArgs.E), "e", "")
-	flag.StringVar(&(progArgs.Cap), "capture", "", "")
+	// Capture Options
+	flag.StringVar(&(progArgs.CaptureOptions.Cap), "capture", "", "")
+	flag.Var(&(progArgs.CaptureOptions.CapGroups), "capture-groups", "")
+	flag.StringVar(&(progArgs.CaptureOptions.CapFile), "capture-file", "cap.txt", "")
 	flag.Parse()
-	progArgs.Files = flag.Args()
+	progArgs.WordlistOptions.Files = flag.Args()
 	return &progArgs
 }
 
 func loadDefaults(args *config.Args) {
-	if len(args.Mc) <= 0 {
-		args.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
+	if len(args.FilterOptions.Mc) <= 0 {
+		args.FilterOptions.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
 	}
 }
 
@@ -266,48 +281,45 @@ func main() {
 	args := parseArgs(os.Args)
 	loadDefaults(args)
 
-	if len(args.Files) <= 0 && !args.Dos {
+	if len(args.WordlistOptions.Files) <= 0 && !args.GeneralOptions.Dos {
 		fmt.Println("Please specify a wordlist unless you are using DOS mode")
 		os.Exit(1)
 	}
 
 	//load request file contents
 	reqFileContent := ""
-	if args.ReqFile != "" {
-		fileBytes, err := ioutil.ReadFile(args.ReqFile)
+	if args.RequestOptions.ReqFile != "" {
+		fileBytes, err := ioutil.ReadFile(args.RequestOptions.ReqFile)
 		if err != nil {
-			fmt.Printf("Error: couldn't open %s\n", args.ReqFile)
+			fmt.Printf("Error: couldn't open %s\n", args.RequestOptions.ReqFile)
 			os.Exit(1)
 		}
 		reqFileContent = utils.RemoveTrailingNewline(string(fileBytes))
 	}
-	args.Timeout = args.Timeout * int(time.Second)
+	args.RequestOptions.Timeout = args.RequestOptions.Timeout * int(time.Second)
 	// apply filter codes
-	args.Mc = utils.SetDif(args.Mc, args.Fc)
-	// parse user supplied extensions
-	// if no extensions then "" gets added anyway
-	if len(args.E) <= 0 {
-		//add blank extension
-		args.E = append(args.E, "")
+	args.FilterOptions.Mc = utils.SetDif(args.FilterOptions.Mc, args.FilterOptions.Fc)
+
+	//add blank extension
+	args.WordlistOptions.Extensions = append(args.WordlistOptions.Extensions, "")
+
+	if !args.GeneralOptions.Dos {
+		utils.TotalJobs = utils.GetNumJobs(args.WordlistOptions.Files, args.WordlistOptions.NoBrute, args.WordlistOptions.Extensions)
 	}
 
-	if !args.Dos {
-		utils.TotalJobs = utils.GetNumJobs(args.Files, args.NoBrute, args.E)
-	}
-
-	var agent *utils.ReqAgentHttp
-	if reqFileContent != "" { // initialize as tcp or http agent
-		if strings.HasSuffix(args.Url, "/") {
-			args.Url = args.Url[:len(args.Url)-1]
+	var agent *request.ReqAgentHttp
+	if reqFileContent != "" { // initialize as http agent
+		if strings.HasSuffix(args.RequestOptions.Url, "/") {
+			args.RequestOptions.Url = args.RequestOptions.Url[:len(args.RequestOptions.Url)-1]
 		}
-		agent = utils.FileToRequestAgent(reqFileContent, args.Url, args.Proxy)
+		agent = request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy)
 	} else {
-		agent = utils.NewReqAgentHttp(args.Url, args.Method, args.Headers, args.Data, args.Proxy)
+		agent = request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy)
 	}
 
 	counter := utils.NewCounter()
-	go utils.PrintProgressLoop(counter, args.Dos)
+	go utils.PrintProgressLoop(counter, args.GeneralOptions.Dos)
 	recurseFuzz(agent, counter, args)
-	utils.PrintProgress(counter, args.Dos)
+	utils.PrintProgress(counter, args.GeneralOptions.Dos)
 	fmt.Println()
 }

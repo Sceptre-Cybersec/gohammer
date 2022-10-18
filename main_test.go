@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/wadeking98/gohammer/config"
+	"github.com/wadeking98/gohammer/processors/request"
 	"github.com/wadeking98/gohammer/utils"
 )
 
@@ -46,9 +47,18 @@ func TestSetup(t *testing.T) {
 
 func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := utils.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "")
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "")
 	counter := utils.NewCounter()
-	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 0})
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{200}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimeter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
+	args.WordlistOptions.NoBrute = true
+	args.WordlistOptions.Extensions = []string{""}
+	go sendReq(reqChan, agent, counter, &args)
 	reqChan <- []string{"a", "b"}
 	close(reqChan)
 	urlResp := <-urlChan
@@ -67,30 +77,23 @@ func TestSendReq(t *testing.T) {
 
 }
 
-// func TestProcReqTemplate(t *testing.T) {
-// 	agent := reqagent.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "GET@0@", "Content-Type: @0@,Host: @0@@1@", "")
-// 	counter := utils.NewCounter()
-
-// 	parsed := ProcReqTemplate(Request{"GET@0@", "http://127.0.0.1/@0@@1@", "Content-Type: @0@,Host: @0@@1@", ""}, []string{"a", "b"}, 0)
-// 	if parsed.Method != "GETa" {
-// 		t.Fatal("Method Fuzzing Failed")
-// 	}
-// 	if parsed.Url != "http://127.0.0.1/ab" {
-// 		t.Fatal("URL Fuzzing Failed")
-// 	}
-// 	if parsed.Headers != "Content-Type: a,Host: ab" {
-// 		t.Fatal("Header Fuzzing Failed")
-// 	}
-// }
-
 func TestBrute(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := utils.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "")
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "")
 	counter := utils.NewCounter()
-	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 0})
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{200}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimeter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
+	args.WordlistOptions.NoBrute = true
+	args.WordlistOptions.Extensions = []string{""}
+	go sendReq(reqChan, agent, counter, &args)
 
-	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 0})
-	procFiles(nil, reqChan, &config.Args{Files: []string{"tests/a.txt", "tests/b.txt"}, E: []string{}, NoBrute: true}, 0)
+	go sendReq(reqChan, agent, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	resp := []string{<-urlChan, <-urlChan}
 	test1 := false
@@ -109,13 +112,23 @@ func TestBrute(t *testing.T) {
 
 func TestExtensions(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := utils.NewReqAgentHttp("http://127.0.0.1:8888/@0@_@1@", "GET", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "")
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@_@1@", "GET", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "")
 	counter := utils.NewCounter()
 	for i := 0; i < 4; i++ {
-		go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "", Retry: 0})
+		var args config.Args
+		args.RequestOptions.Timeout = 10 * int(time.Second)
+		args.FilterOptions.Mc = []int{200}
+		args.RecursionOptions.RecursePosition = 0
+		args.RecursionOptions.RecurseDelimeter = ""
+		args.GeneralOptions.Retry = 0
+		go sendReq(reqChan, agent, counter, &args)
 	}
 
-	procFiles(nil, reqChan, &config.Args{Files: []string{"tests/a.txt", "tests/b.txt"}, NoBrute: true, E: []string{".txt", ".php"}}, 0)
+	var args config.Args
+	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
+	args.WordlistOptions.NoBrute = true
+	args.WordlistOptions.Extensions = []string{".txt", ".php"}
+	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	tests := []string{"/a.php_c.php", "/a.txt_c.txt", "/b.txt_d.txt", "/b.php_d.php"}
 	numPassed := 0
@@ -136,10 +149,18 @@ func TestExtensions(t *testing.T) {
 
 func TestPostData(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := utils.NewReqAgentHttp("http://127.0.0.1:8888/data", "POST", []string{}, "test=hello@0@", "")
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/data", "POST", []string{}, "test=hello@0@", "")
 	counter := utils.NewCounter()
-	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "/", Retry: 0})
-	procFiles(nil, reqChan, &config.Args{Files: []string{"tests/oneChar.txt"}, E: []string{""}}, 0)
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{200}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimeter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
+	args.WordlistOptions.Extensions = []string{""}
+	go sendReq(reqChan, agent, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	resp := <-bodyChan
 	<-urlChan
@@ -150,9 +171,21 @@ func TestPostData(t *testing.T) {
 }
 
 func TestRecursion(t *testing.T) {
-	agent := utils.NewReqAgentHttp("http://127.0.0.1:8888/recurse/@0@", "GET", []string{}, "", "")
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/recurse/@0@", "GET", []string{}, "", "")
 	counter := utils.NewCounter()
-	go recurseFuzz(agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200, 301}, RecursePosition: 0, NoBrute: false, Files: []string{"tests/oneChar.txt"}, Threads: 1, Depth: 3, RecurseDelimeter: "/", Retry: 0})
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{200, 301}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimeter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
+	args.WordlistOptions.NoBrute = false
+	args.GeneralOptions.Threads = 1
+	args.WordlistOptions.Extensions = []string{""}
+	args.RecursionOptions.Depth = 3
+	args.GeneralOptions.Retry = 0
+	go recurseFuzz(agent, counter, &args)
 	url1 := <-urlChan
 	url2 := <-urlChan
 	url3 := <-urlChan
@@ -170,81 +203,6 @@ func TestRecursion(t *testing.T) {
 // 	}
 // }
 
-// func TestUrlToTcp(t *testing.T) {
-// 	address := UrlToTcpAddress("https://regex101.com/")
-// 	if address.Port != 443 || !address.Ssl || address.Address != "regex101.com" {
-// 		t.Fatal("Incorrect URL Parsing")
-// 	}
-
-// 	address = UrlToTcpAddress("https://127.0.0.1:8888/")
-// 	if address.Port != 8888 || !address.Ssl || address.Address != "127.0.0.1" {
-// 		t.Fatal("Incorrect URL Parsing")
-// 	}
-
-// 	address = UrlToTcpAddress("http://0.0.0.0:8888/")
-// 	if address.Port != 8888 || address.Ssl || address.Address != "0.0.0.0" {
-// 		t.Fatal("Incorrect URL Parsing")
-// 	}
-
-// 	address = UrlToTcpAddress("http://localhost/")
-// 	if address.Port != 80 || address.Ssl || address.Address != "localhost" {
-// 		t.Fatal("Incorrect URL Parsing")
-// 	}
-// }
-
-// func TestReqFile(t *testing.T) {
-// 	fileBytes, err := ioutil.ReadFile("tests/req.txt")
-// 	if err != nil {
-// 		fmt.Println("Error: couldn't open file")
-// 	}
-// 	reqFileContent := string(fileBytes)
-// 	agent := reqagent.NewReqAgentTcp(reqFileContent, "http://127.0.0.1:8888/")
-// 	counter := utils.NewCounter()
-// 	//reset frontier
-// 	utils.FrontierQ = [][]string{{""}}
-// 	go recurseFuzz(agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
-// 	url := <-urlChan
-// 	fmt.Println(url)
-// 	if url != "/tcp/c" {
-// 		t.Fatal("Tcp Socket Request Failed")
-// 	}
-
-// 	fileBytes, err = ioutil.ReadFile("tests/reqPost.txt")
-// 	if err != nil {
-// 		fmt.Println("Error: couldn't open file")
-// 	}
-// 	reqFileContent = utils.RemoveTrailingNewline(string(fileBytes))
-// 	agent2 := reqagent.NewReqAgentTcp(reqFileContent, "http://127.0.0.1:8888/")
-// 	counter2 := utils.NewCounter()
-// 	go recurseFuzz(agent2, counter2, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, Depth: 2, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
-// 	body := <-bodyChan
-// 	url = <-urlChan
-// 	if url != "/data/c" {
-// 		t.Fatal("Tcp Socket Post Request Failed")
-// 	}
-// 	if body != "test=helloc" {
-// 		t.Fatal("invalid post data")
-// 	}
-// }
-
-// func TestRecursionTcp(t *testing.T) {
-// 	fileBytes, err := ioutil.ReadFile("tests/reqRecurse.txt")
-// 	if err != nil {
-// 		fmt.Println("Error: couldn't open file")
-// 	}
-// 	reqFileContent := string(fileBytes)
-// 	agent := reqagent.NewReqAgentTcp(reqFileContent, "http://127.0.0.1:8888/")
-// 	counter := utils.NewCounter()
-// 	go recurseFuzz(agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200, 301}, RecursePosition: 0, Depth: 3, RecurseDelimeter: "/", Retry: 5, Threads: 1, Files: []string{"tests/oneChar.txt"}})
-// 	time.Sleep(1 * time.Second)
-// 	url1 := <-urlChan
-// 	url2 := <-urlChan
-// 	url3 := <-urlChan
-// 	if url1 != "/recurse/c" || url2 != "/recurse/c/c" || url3 != "/recurse/c/c/c" {
-// 		t.Fatalf("recursion failed %s %s %s\n", url1, url2, url3)
-// 	}
-// }
-
 func TestFileToReq(t *testing.T) {
 	fileBytes, err := ioutil.ReadFile("tests/reqPost.txt")
 	if err != nil {
@@ -252,7 +210,7 @@ func TestFileToReq(t *testing.T) {
 	}
 	reqFileContent := string(fileBytes)
 
-	agent := utils.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "")
+	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "")
 	if agent.GetUrl() != "http://127.0.0.1:8888/data/@0@" || len(agent.GetHeaders()) != 16 || agent.GetMethod() != "POST" || agent.GetBody() != "test=hello@0@" {
 		fmt.Printf("URL: {%s}\n", agent.GetUrl())
 		fmt.Printf("Headers: {%d}\n", len(agent.GetHeaders()))
@@ -269,12 +227,20 @@ func TestFilePost(t *testing.T) {
 	}
 	reqFileContent := utils.RemoveTrailingNewline(string(fileBytes))
 
-	agent := utils.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "")
+	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "")
 
 	reqChan := make(chan []string)
 	counter := utils.NewCounter()
-	go sendReq(reqChan, agent, counter, &config.Args{Timeout: 10 * int(time.Second), Mc: []int{200}, RecursePosition: 0, RecurseDelimeter: "/", Retry: 0})
-	procFiles(nil, reqChan, &config.Args{Files: []string{"tests/oneChar.txt"}, E: []string{""}}, 0)
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{200}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimeter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
+	args.WordlistOptions.Extensions = []string{""}
+	go sendReq(reqChan, agent, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	resp := <-bodyChan
 	<-urlChan

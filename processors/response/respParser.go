@@ -1,4 +1,4 @@
-package utils
+package response
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/wadeking98/gohammer/config"
+	"github.com/wadeking98/gohammer/utils"
 )
 
 type Resp struct {
@@ -76,28 +77,28 @@ func (r *Resp) IsRecurse() bool {
 	return ret
 }
 
-func (resp *Resp) ProcessResp(positions []string, counter *Counter, args *config.Args) {
+func (resp *Resp) ProcessResp(positions []string, counter *utils.Counter, args *config.Args) {
 
 	filter := NewFilter(resp, args)
 	passed := filter.ApplyFilters(args)
 	if passed && len(positions) > 0 {
 		displayPos := make([]string, len(positions))
 		copy(displayPos, positions)
-		displayPos[args.RecursePosition] = strings.Join(FrontierQ[0], "") + positions[args.RecursePosition]
+		displayPos[args.RecursionOptions.RecursePosition] = strings.Join(utils.FrontierQ[0], "") + positions[args.RecursionOptions.RecursePosition]
 		fmt.Println(respLineFormatter(resp.Code, resp.Size, resp.Words, resp.Lines, resp.Time, displayPos, 12))
-		PrintProgress(counter, args.Dos)
+		utils.PrintProgress(counter, args.GeneralOptions.Dos)
 	}
 
-	if args.Cap != "" {
+	if args.CaptureOptions.Cap != "" {
 		cap := NewCapture(resp, args)
 		cap.ApplyCapture()
 	}
 
 	if resp.IsRecurse() {
-		FrontierLock.Lock()
+		utils.FrontierLock.Lock()
 		// add current position to base string of Frontier[0] and add it to the frontier
-		FrontierQ = append(FrontierQ, append(FrontierQ[0], positions[args.RecursePosition]+args.RecurseDelimeter))
-		FrontierLock.Unlock()
+		utils.FrontierQ = append(utils.FrontierQ, append(utils.FrontierQ[0], positions[args.RecursionOptions.RecursePosition]+args.RecursionOptions.RecurseDelimeter))
+		utils.FrontierLock.Unlock()
 	}
 }
 

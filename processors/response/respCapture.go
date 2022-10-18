@@ -1,4 +1,4 @@
-package utils
+package response
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ type Capture struct {
 func NewCapture(resp *Resp, conf *config.Args) *Capture {
 	c := Capture{
 		response:  resp,
-		capString: conf.Cap,
+		capString: conf.CaptureOptions.Cap,
 	}
 	return &c
 }

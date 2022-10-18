@@ -52,29 +52,58 @@ func (m *multiSplitIntFlag) Set(value string) error {
 	return nil
 }
 
-type Args struct {
-	Url              string
-	Proxy            string
-	Threads          int
-	Method           string
-	ReqFile          string
-	NoBrute          bool
-	Dos              bool
-	Headers          multiStringFlag
-	Files            []string
-	Mc               multiSplitIntFlag
-	Mt               int
-	Fc               multiSplitIntFlag
-	Fs               multiSplitIntFlag
-	Fw               multiSplitIntFlag
-	Fl               multiSplitIntFlag
-	Ft               int
-	Timeout          int
-	E                multiSplitStringFlag
-	Cap              string
-	Data             string
+type RequestOptions struct {
+	Url     string
+	Proxy   string
+	Method  string
+	ReqFile string
+	Headers multiStringFlag
+	Timeout int
+	Data    string
+}
+
+type GeneralOptions struct {
+	Threads int
+	Retry   int
+	Dos     bool
+}
+
+type RecursionOptions struct {
 	Depth            int
 	RecursePosition  int
 	RecurseDelimeter string
-	Retry            int
+}
+
+type WordlistOptions struct {
+	NoBrute    bool
+	Extensions multiSplitStringFlag
+	Files      []string
+}
+
+type FilterOptions struct {
+	Mc multiSplitIntFlag
+	Ms multiSplitIntFlag
+	Mw multiSplitIntFlag
+	Ml multiSplitIntFlag
+	Mt int
+	Fc multiSplitIntFlag
+	Fs multiSplitIntFlag
+	Fw multiSplitIntFlag
+	Fl multiSplitIntFlag
+	Ft int
+}
+
+type CaptureOptions struct {
+	Cap       string
+	CapGroups multiSplitIntFlag
+	CapFile   string
+}
+
+type Args struct {
+	RequestOptions   RequestOptions
+	GeneralOptions   GeneralOptions
+	RecursionOptions RecursionOptions
+	WordlistOptions  WordlistOptions
+	FilterOptions    FilterOptions
+	CaptureOptions   CaptureOptions
 }

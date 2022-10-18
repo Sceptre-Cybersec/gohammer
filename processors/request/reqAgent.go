@@ -1,4 +1,4 @@
-package utils
+package request
 
 import (
 	"bytes"
@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/wadeking98/gohammer/config"
+	"github.com/wadeking98/gohammer/processors/response"
+	"github.com/wadeking98/gohammer/utils"
 )
 
 type ReqTemplate struct {
@@ -38,7 +40,6 @@ func NewReqTemplate(reqUrl string, method string, headers []string, body string)
 }
 
 func NewReqAgentHttp(reqUrl string, method string, headers []string, body string, proxy string) *ReqAgentHttp {
-	fmt.Println("HERE")
 	template := NewReqTemplate(reqUrl, method, headers, body)
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
@@ -78,14 +79,14 @@ func (req *ReqAgentHttp) GetBody() string {
 	return req.template.body
 }
 
-func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config.Args) (bool, error) {
+func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *config.Args) (bool, error) {
 
 	// apply positions from wordlist to request template
 	procReq := procReqTemplate(req, positions, args)
 	reqTemplate, err := http.NewRequest(procReq.method, procReq.url, bytes.NewBuffer([]byte(procReq.body)))
 	ctx := context.Background()
 	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, time.Duration(args.Timeout))
+	ctx, cancel = context.WithTimeout(ctx, time.Duration(args.RequestOptions.Timeout))
 	defer cancel()
 	reqTemplate = reqTemplate.WithContext(ctx)
 	if err != nil {
@@ -111,10 +112,10 @@ func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config
 	start := time.Now()
 	resp, err := req.client.Do(reqTemplate)
 	elapsed := int(time.Since(start) / time.Millisecond)
-	if elapsed > args.Timeout {
-		fmt.Printf("Elapsed: %d    \tTimeout:%d\n", elapsed, args.Timeout)
+	if elapsed > args.RequestOptions.Timeout {
+		fmt.Printf("Elapsed: %d    \tTimeout:%d\n", elapsed, args.RequestOptions.Timeout)
 	}
-	r := NewRespFromHttp(resp, elapsed, err)
+	r := response.NewRespFromHttp(resp, elapsed, err)
 	// not an error created by 301 without Location header
 	if r.Code == 0 && err != nil {
 		return false, err
@@ -128,12 +129,12 @@ func (req *ReqAgentHttp) Send(positions []string, counter *Counter, args *config
 // ProcReqTemplate applies words from a set of wordlists to a request template
 // Returns the parsed request template
 func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args) *ReqTemplate {
-	url := ReplacePosition(reqAgent.GetUrl(), positions, args.RecursePosition)
-	method := ReplacePosition(reqAgent.GetMethod(), positions, args.RecursePosition)
+	url := utils.ReplacePosition(reqAgent.GetUrl(), positions, args.RecursionOptions.RecursePosition)
+	method := utils.ReplacePosition(reqAgent.GetMethod(), positions, args.RecursionOptions.RecursePosition)
 	var headers []string
 	for _, header := range reqAgent.GetHeaders() {
-		headers = append(headers, ReplacePosition(header, positions, args.RecursePosition))
+		headers = append(headers, utils.ReplacePosition(header, positions, args.RecursionOptions.RecursePosition))
 	}
-	body := ReplacePosition(reqAgent.GetBody(), positions, args.RecursePosition)
+	body := utils.ReplacePosition(reqAgent.GetBody(), positions, args.RecursionOptions.RecursePosition)
 	return NewReqTemplate(url, method, headers, body)
 }

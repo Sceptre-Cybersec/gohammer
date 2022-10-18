@@ -1,4 +1,4 @@
-package utils
+package response
 
 import (
 	"github.com/wadeking98/gohammer/config"
@@ -12,7 +12,7 @@ type Filter struct {
 func NewFilter(resp *Resp, conf *config.Args) *Filter {
 	f := Filter{
 		response: resp,
-		filters:  []func(*Resp, *config.Args) bool{passedCodeFound, passedLengthFilter, passedTimeFilter},
+		filters:  []func(*Resp, *config.Args) bool{passedCodeFound, passedLengthFilter, passedLengthMatch, passedTimeFilter},
 	}
 	return &f
 }
@@ -32,10 +32,10 @@ func (f *Filter) ApplyFilters(args *config.Args) bool {
 // passedTimeFilter determines if a request fails based on the time it took to reply
 func passedTimeFilter(resp *Resp, args *config.Args) bool {
 	passed := true
-	if args.Ft != 0 {
-		passed = resp.Time < args.Ft
-	} else if args.Mt != 0 {
-		passed = resp.Time >= args.Mt
+	if args.FilterOptions.Ft != 0 {
+		passed = resp.Time < args.FilterOptions.Ft
+	} else if args.FilterOptions.Mt != 0 {
+		passed = resp.Time >= args.FilterOptions.Mt
 	}
 	return passed
 }
@@ -44,7 +44,7 @@ func passedTimeFilter(resp *Resp, args *config.Args) bool {
 // and logs it to stdout if it is found
 func passedCodeFound(resp *Resp, args *config.Args) bool {
 	mcFound := false
-	for _, i := range args.Mc {
+	for _, i := range args.FilterOptions.Mc {
 		if resp.Code == i {
 			mcFound = true
 			break
@@ -57,10 +57,10 @@ func passedCodeFound(resp *Resp, args *config.Args) bool {
 // length filters captures a response length
 func passedLengthFilter(resp *Resp, args *config.Args) bool {
 	filterPassed := true
-	filters := [][]int{args.Fs, args.Fw, args.Fl}
+	filters := [][]int{args.FilterOptions.Fs, args.FilterOptions.Fw, args.FilterOptions.Fl}
 	sizes := []int{resp.Size, resp.Words, resp.Lines}
 	for i, s := range sizes { //apply length filter to chars, words, lines
-		filterPassed = filterPassed && !lenFilterMatches(s, filters[i])
+		filterPassed = !lenFilterSearch(s, filters[i])
 		if !filterPassed {
 			break
 		}
@@ -69,8 +69,25 @@ func passedLengthFilter(resp *Resp, args *config.Args) bool {
 	return filterPassed
 }
 
-//lenFilterMatches returns true if the length is in the array of lengths
-func lenFilterMatches(length int, lengths []int) bool {
+// passedLengthMatch takes the response sizes (chars, words, lines) respectively as an array and returns false if none of the
+// length filters captures a response length
+func passedLengthMatch(resp *Resp, args *config.Args) bool {
+	filterPassed := true
+	filters := [][]int{args.FilterOptions.Ms, args.FilterOptions.Mw, args.FilterOptions.Ml}
+	sizes := []int{resp.Size, resp.Words, resp.Lines}
+	for i, s := range sizes { //apply length matcher to chars, words
+		// we only care if the user has specified matchers
+		filterPassed = len(filters[i]) <= 0 || lenFilterSearch(s, filters[i])
+		if !filterPassed {
+			break
+		}
+	}
+
+	return filterPassed
+}
+
+//lenFilterSearch returns true if the length is in the array of lengths
+func lenFilterSearch(length int, lengths []int) bool {
 	ret := false
 	if len(lengths) > 0 {
 		for _, s := range lengths {
