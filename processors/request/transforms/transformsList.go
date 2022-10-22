@@ -14,6 +14,7 @@ func NewTransformList() TransformList {
 		"b64Decode": b64Decode,
 		"urlEncode": urlEncode,
 		"urlDecode": urlDecode,
+		"concat":    concat,
 	}
 	return t
 }

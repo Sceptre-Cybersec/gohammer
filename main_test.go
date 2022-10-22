@@ -10,6 +10,7 @@ import (
 
 	"github.com/wadeking98/gohammer/config"
 	"github.com/wadeking98/gohammer/processors/request"
+	"github.com/wadeking98/gohammer/processors/request/transforms"
 	"github.com/wadeking98/gohammer/utils"
 )
 
@@ -247,5 +248,36 @@ func TestFilePost(t *testing.T) {
 	fmt.Println(resp)
 	if resp != "test=helloc" {
 		t.Fatal("invalid post data")
+	}
+}
+func TestTransforms(t *testing.T) {
+	transformList := transforms.NewTransformList()
+	var args config.Args
+	args.RecursionOptions.RecursePosition = 0
+	outp := transforms.ApplyTransforms("concat(b64Decode(b64Encode(@0@\\,test1)),test\\))", transformList, []string{"test)"}, &args)
+	if outp != "test),test1test)" {
+		t.Fatal("invalid transform output")
+	}
+}
+
+func TestTransformRequests(t *testing.T) {
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@t0@", "GET", []string{}, "", "")
+	counter := utils.NewCounter()
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{200}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimeter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
+	args.WordlistOptions.Extensions = []string{""}
+	args.TransformOptions.Transforms = []string{"urlEncode(concat(b64Encode(@0@:test!),\\,,b64Encode(@0@:hello)))"}
+	reqChan := make(chan []string)
+	go sendReq(reqChan, agent, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
+	close(reqChan)
+	resp := <-urlChan
+	if resp != "/Yzp0ZXN0IQ%3D%3D%2CYzpoZWxsbw%3D%3D" {
+		t.Fatal("Unexpected Transform output")
 	}
 }

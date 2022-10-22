@@ -101,6 +101,10 @@ type CaptureOptions struct {
 	CapFile  string
 }
 
+type TransformOptions struct {
+	Transforms multiStringFlag
+}
+
 type Args struct {
 	RequestOptions   RequestOptions
 	GeneralOptions   GeneralOptions
@@ -108,4 +112,5 @@ type Args struct {
 	WordlistOptions  WordlistOptions
 	FilterOptions    FilterOptions
 	CaptureOptions   CaptureOptions
+	TransformOptions TransformOptions
 }

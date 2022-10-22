@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/wadeking98/gohammer/config"
+	"github.com/wadeking98/gohammer/processors/request/transforms"
 	"github.com/wadeking98/gohammer/processors/response"
 	"github.com/wadeking98/gohammer/utils"
 )
@@ -26,8 +27,9 @@ type ReqTemplate struct {
 	body    string
 }
 type ReqAgentHttp struct {
-	template *ReqTemplate
-	client   *http.Client
+	template      *ReqTemplate
+	transformList transforms.TransformList
+	client        *http.Client
 }
 
 func NewReqTemplate(reqUrl string, method string, headers []string, body string) *ReqTemplate {
@@ -57,9 +59,12 @@ func NewReqAgentHttp(reqUrl string, method string, headers []string, body string
 	}
 
 	client.Transport = &transportConfig
+
+	transformList := transforms.NewTransformList()
 	return &ReqAgentHttp{
-		template: template,
-		client:   client,
+		template:      template,
+		client:        client,
+		transformList: transformList,
 	}
 }
 
@@ -136,5 +141,22 @@ func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Ar
 		headers = append(headers, utils.ReplacePosition(header, positions, args.RecursionOptions.RecursePosition))
 	}
 	body := utils.ReplacePosition(reqAgent.GetBody(), positions, args.RecursionOptions.RecursePosition)
+
+	if len(args.TransformOptions.Transforms) > 0 {
+		// apply transforms too
+		var transformPostions []string
+		// process transforms into postions array
+		for _, transTemplate := range args.TransformOptions.Transforms {
+			transformPostions = append(transformPostions, transforms.ApplyTransforms(transTemplate, reqAgent.transformList, positions, args))
+		}
+		url = transforms.ReplaceTranformPosition(url, transformPostions)
+		method = transforms.ReplaceTranformPosition(method, transformPostions)
+		var transformedHeaders []string
+		for _, header := range headers {
+			transformedHeaders = append(headers, transforms.ReplaceTranformPosition(header, transformPostions))
+		}
+		headers = transformedHeaders
+		body = transforms.ReplaceTranformPosition(body, transformPostions)
+	}
 	return NewReqTemplate(url, method, headers, body)
 }
