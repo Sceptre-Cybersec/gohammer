@@ -216,11 +216,37 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("-brute\tWhether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line. [Default:true]")
 		fmt.Println("-e\tThe comma separated file extensions to fuzz with. Example: '.txt,.php,.html'")
 		fmt.Println()
+		fmt.Println("Transforms: Transforms are a versitile tool that allows you to use functions to mutate your wordlists on the fly")
+		fmt.Println("-transform\tThe transform string to apply to your wordlist. To use multiple transforms, supply the flag multiple times: -transform <transform1> -transform <transform2> ...")
+		fmt.Println("Transform Syntax:")
+		fmt.Println("\t\t" + `For transforms there are two object types, functions and strings. A function is any string followed by opening and closing brackets,
+		a string is anything else, (usually the argument to a function). For example, in the transform 'b64Encode(test)' b64Encode is the function and test is
+		the string. Note that quotes are not used to define a string. Once a transform is defined it can be referenced in a similar way to a wordlist: @t0@, @t1@, @t2@, etc.
+		Escape characters are supported but only needed for commas and braces: \, \( \)`)
+		fmt.Println()
+		fmt.Println("Example Transforms: b64Encode(@0@:@1@), concat(urlEncode(b64Encode(test1)),@0@,urlEncode(@0@))")
+		fmt.Println()
+		fmt.Println("Transform Functions:")
+		fmt.Println("\tb64Encode(string): takes a single string and returns a base 64 encoding of the string")
+		fmt.Println("\tb64Decode(string): takes a single base64 encoded string and returns the decoded string")
+		fmt.Println("\turlEncode(string): takes a single string and encodes unsafe url characters")
+		fmt.Println("\turlDecode(string): takes a single url encoded string and returns the decoded string")
+		fmt.Println("\t" + `concat(string, string, string, ...): takes any number of strings and returns all the strings joined together. Note that
+		concat is only needed when joinging the output of a function to another function, or to a string. It is not needed to join two strings`)
 		fmt.Println()
 		fmt.Println("Example Usage:")
+		fmt.Println()
+		fmt.Println("Standard Usage:")
 		fmt.Println("gohammer -u http://127.0.0.1/@0@ -t 32 -e .txt,.html,.php /home/me/myWordlist.txt")
+		fmt.Println()
+		fmt.Println("POST with data:")
 		fmt.Println("gohammer -u https://some.site.com/ -method POST -d '{\"user\":\"@0@\", \"password\":\"@1@\"}' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+		fmt.Println()
+		fmt.Println("Request from File:")
 		fmt.Println("gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+		fmt.Println()
+		fmt.Println("Transform Usage (HTTP Basic Auth):")
+		fmt.Println("gohammer -u https://some.site.com/ -H 'Authorization: @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 	}
 	// Request Options
 	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "http://127.0.0.1/", "")
@@ -263,6 +289,10 @@ func parseArgs(args []string) *config.Args {
 	flag.StringVar(&(progArgs.CaptureOptions.Cap), "capture", "", "")
 	flag.IntVar(&(progArgs.CaptureOptions.CapGroup), "capture-group", 0, "")
 	flag.StringVar(&(progArgs.CaptureOptions.CapFile), "capture-file", "cap.txt", "")
+
+	// Transform Options
+	flag.Var(&(progArgs.TransformOptions.Transforms), "transform", "")
+
 	flag.Parse()
 	progArgs.WordlistOptions.Files = flag.Args()
 	return &progArgs

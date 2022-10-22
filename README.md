@@ -12,6 +12,7 @@ After playing many hack the box machines and being frustrated with how hard it i
 - Fuzz anything in the request, from headers to request methods to upload file content
 - Retry failed requests, never miss out on finding an important file due to a bad connection
 - DOS mode for stress testing
+- Transforms: mutate your wordlist on the fly using tansform functions
 - *Coming soon:* User configuration yaml file containing your desired default configuration so you don't have to look through your command line history to find you favourite command line parameters to use
 
 ## Speed:
@@ -42,6 +43,9 @@ Bruteforce username and password using wordlists like a user:pass list
   
 Bruteforce username and password using request file:  
 > gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt
+
+Bruteforce HTTP Basic Auth using transforms:
+> gohammer -u https://some.site.com/ -H 'Authorization: @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt
 
 ## Created and Maintained by:
  <a href="https://app.hackthebox.com/users/254685"><img src="http://www.hackthebox.eu/badge/image/254685" alt="Hack The Box"></a>
