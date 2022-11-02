@@ -196,13 +196,13 @@ func TestRecursion(t *testing.T) {
 	}
 }
 
-// func TestNumJobs(t *testing.T) {
-// 	numJobsBrute := GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
-// 	numJobs := GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
-// 	if numJobs != 4 && numJobsBrute != 16 {
-// 		t.Fatal("Incorrect number of jobs")
-// 	}
-// }
+func TestNumJobs(t *testing.T) {
+	numJobsBrute := utils.GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, false, []string{"", ".txt"})
+	numJobs := utils.GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
+	if numJobs != 4 && numJobsBrute != 16 {
+		t.Fatal("Incorrect number of jobs")
+	}
+}
 
 func TestFileToReq(t *testing.T) {
 	fileBytes, err := ioutil.ReadFile("tests/reqPost.txt")
