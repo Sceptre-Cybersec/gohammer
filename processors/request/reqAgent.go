@@ -2,7 +2,8 @@ package request
 
 import (
 	"bytes"
-	"context"
+	"crypto/tls"
+	"net"
 	"strconv"
 
 	// "crypto/tls"
@@ -41,10 +42,26 @@ func NewReqTemplate(reqUrl string, method string, headers []string, body string)
 	}
 }
 
-func NewReqAgentHttp(reqUrl string, method string, headers []string, body string, proxy string) *ReqAgentHttp {
+func NewReqAgentHttp(reqUrl string, method string, headers []string, body string, proxy string, timeout int) *ReqAgentHttp {
 	template := NewReqTemplate(reqUrl, method, headers, body)
 	client := &http.Client{
+		Timeout:       time.Duration(timeout * int(time.Second)),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+		Transport: &http.Transport{
+			ForceAttemptHTTP2:   true,
+			MaxIdleConns:        1000,
+			MaxIdleConnsPerHost: 500,
+			MaxConnsPerHost:     500,
+			DialContext: (&net.Dialer{
+				Timeout: time.Duration(timeout * int(time.Second)),
+			}).DialContext,
+			TLSHandshakeTimeout: time.Duration(timeout * int(time.Second)),
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+				Renegotiation:      tls.RenegotiateOnceAsClient,
+				ServerName:         "",
+			},
+		},
 	}
 
 	var transportConfig http.Transport
@@ -89,11 +106,7 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 	// apply positions from wordlist to request template
 	procReq := procReqTemplate(req, positions, args)
 	reqTemplate, err := http.NewRequest(procReq.method, procReq.url, bytes.NewBuffer([]byte(procReq.body)))
-	ctx := context.Background()
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, time.Duration(args.RequestOptions.Timeout))
-	defer cancel()
-	reqTemplate = reqTemplate.WithContext(ctx)
+
 	if err != nil {
 		fmt.Println("Error making request")
 		os.Exit(1)
