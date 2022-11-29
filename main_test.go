@@ -48,7 +48,7 @@ func TestSetup(t *testing.T) {
 
 func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 1)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
@@ -80,7 +80,7 @@ func TestSendReq(t *testing.T) {
 
 func TestBrute(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 1)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
@@ -113,7 +113,7 @@ func TestBrute(t *testing.T) {
 
 func TestExtensions(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@_@1@", "GET", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 1)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@_@1@", "GET", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
 	counter := utils.NewCounter()
 	for i := 0; i < 4; i++ {
 		var args config.Args
@@ -150,7 +150,7 @@ func TestExtensions(t *testing.T) {
 
 func TestPostData(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/data", "POST", []string{}, "test=hello@0@", "", 1)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/data", "POST", []string{}, "test=hello@0@", "", 5)
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
@@ -172,7 +172,7 @@ func TestPostData(t *testing.T) {
 }
 
 func TestRecursion(t *testing.T) {
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/recurse/@0@", "GET", []string{}, "", "", 1)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/recurse/@0@", "GET", []string{}, "", "", 5)
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
@@ -211,7 +211,7 @@ func TestFileToReq(t *testing.T) {
 	}
 	reqFileContent := string(fileBytes)
 
-	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 1)
+	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5)
 	if agent.GetUrl() != "http://127.0.0.1:8888/data/@0@" || len(agent.GetHeaders()) != 16 || agent.GetMethod() != "POST" || agent.GetBody() != "test=hello@0@" {
 		fmt.Printf("URL: {%s}\n", agent.GetUrl())
 		fmt.Printf("Headers: {%d}\n", len(agent.GetHeaders()))
@@ -228,7 +228,7 @@ func TestFilePost(t *testing.T) {
 	}
 	reqFileContent := utils.RemoveTrailingNewline(string(fileBytes))
 
-	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 1)
+	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5)
 
 	reqChan := make(chan []string)
 	counter := utils.NewCounter()
@@ -261,7 +261,7 @@ func TestTransforms(t *testing.T) {
 }
 
 func TestTransformRequests(t *testing.T) {
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@t0@", "GET", []string{}, "", "", 1)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@t0@", "GET", []string{}, "", "", 5)
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
