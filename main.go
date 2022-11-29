@@ -19,8 +19,6 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 	positions, ok := <-positionsChan
 	// while receiving input on channel
 	for ok {
-		// just need a shallow copy since we are only copying timeout
-		tempArgs := *args
 
 		//retry request x times unless it succeeds
 		success := false
@@ -31,11 +29,7 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 		//request retry section
 		index := 1
 		for ; r >= 0 && !success; r-- {
-			// scale the timeout based on retry requests, starts with
-			if tempArgs.GeneralOptions.Retry > 0 {
-				tempArgs.RequestOptions.Timeout = index * args.RequestOptions.Timeout / tempArgs.GeneralOptions.Retry
-			}
-			status, err = agent.Send(positions, counter, &tempArgs)
+			status, err = agent.Send(positions, counter, args)
 			success = success || status
 			index = index + 1
 		}
@@ -185,7 +179,7 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println()
 		fmt.Println("General Options:")
 		fmt.Println("-t\tThe number of concurrent threads [Default:10]")
-		fmt.Println("-retry\tThe number of times to retry a failed request before giving up [Default:3]")
+		fmt.Println("-retry\tThe number of times to retry a failed request before giving up [Default:0]")
 		fmt.Println("-dos\tRun a denial of service attack (for stress testing) [Default:false]")
 		fmt.Println()
 		fmt.Println("Recursion Options:")
@@ -259,7 +253,7 @@ func parseArgs(args []string) *config.Args {
 
 	// General Options
 	flag.IntVar(&(progArgs.GeneralOptions.Threads), "t", 10, "")
-	flag.IntVar(&(progArgs.GeneralOptions.Retry), "retry", 3, "")
+	flag.IntVar(&(progArgs.GeneralOptions.Retry), "retry", 0, "")
 	flag.BoolVar(&(progArgs.GeneralOptions.Dos), "dos", false, "")
 
 	// Recursion Options
@@ -348,9 +342,9 @@ func main() {
 		if strings.HasSuffix(args.RequestOptions.Url, "/") {
 			args.RequestOptions.Url = args.RequestOptions.Url[:len(args.RequestOptions.Url)-1]
 		}
-		agent = request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy)
+		agent = request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy, args.RequestOptions.Timeout)
 	} else {
-		agent = request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy)
+		agent = request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy, args.RequestOptions.Timeout)
 	}
 
 	counter := utils.NewCounter()

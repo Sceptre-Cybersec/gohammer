@@ -6,7 +6,7 @@ import (
 	"regexp"
 )
 
-func FileToRequestAgent(reqContent string, urlBase string, proxy string) *ReqAgentHttp {
+func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout int) *ReqAgentHttp {
 	getMethod := regexp.MustCompile(`\S+`)
 	method := getMethod.FindString(reqContent)
 
@@ -37,7 +37,7 @@ func FileToRequestAgent(reqContent string, urlBase string, proxy string) *ReqAge
 		cleanedHeaders = append(cleanedHeaders, stripNL.ReplaceAllString(header, ""))
 	}
 
-	req := NewReqAgentHttp(path, method, cleanedHeaders, body, proxy)
+	req := NewReqAgentHttp(path, method, cleanedHeaders, body, proxy, timeout)
 
 	return req
 
