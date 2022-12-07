@@ -198,7 +198,7 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("-fs\tFilter http response by size")
 		fmt.Println("-fw\tFilter http response by number of words")
 		fmt.Println("-fl\tFilter http response by number of lines")
-		fmt.Println("-mr\tFilter http response by regular expression in response body")
+		fmt.Println("-fr\tFilter http response by regular expression in response body")
 		fmt.Println("-ft\tFilter responses that take longer than or equal to the specified time in miliseconds")
 		fmt.Println()
 		fmt.Println("Capture Options:")

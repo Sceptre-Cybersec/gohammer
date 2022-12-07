@@ -45,7 +45,7 @@ Bruteforce username and password using request file:
 > gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt
 
 Bruteforce HTTP Basic Auth using transforms:
-> gohammer -u https://some.site.com/ -H 'Authorization: @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt
+> gohammer -u https://some.site.com/ -H 'Authorization: Basic @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt
 
 ## Created and Maintained by:
  <a href="https://app.hackthebox.com/users/254685"><img src="http://www.hackthebox.eu/badge/image/254685" alt="Hack The Box"></a>
