@@ -13,10 +13,11 @@ After playing many hack the box machines and being frustrated with how hard it i
 - Retry failed requests, never miss out on finding an important file due to a bad connection
 - DOS mode for stress testing
 - Transforms: mutate your wordlist on the fly using tansform functions
-- *Coming soon:* User configuration yaml file containing your desired default configuration so you don't have to look through your command line history to find you favourite command line parameters to use
+- *Coming soon:* User configuration yaml file containing your desired default configuration
 
 ## Speed:
-Gohammer performs similarily to other fuzzing tools like ffuf and can reach speeds of 1000 requests pers second using 60 threads on some hosts.
+Gohammer performs similarily to other fuzzing tools like ffuf. 
+Some differences have been noted when fuzzing through a VPN, Gohammer seems to perform slightly better than ffuf when both are running though a VPN, but slightly worse outside of a VPN.
 One thing to note while using the request file functionality is the `Connection: close` header. This header is there by default on most requests intercepted by
 BurpSuite from your browser. It will slow down fuzzing because it tells the host to close each TCP connection after returning an HTTP response. 
 For the fastest fuzzing using request files, remove the `Connection: close` header 
@@ -46,6 +47,9 @@ Bruteforce username and password using request file:
 
 Bruteforce HTTP Basic Auth using transforms:
 > gohammer -u https://some.site.com/ -H 'Authorization: Basic @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt
+  
+
+## Please feel free to contribute to this project, pull requests are welcome!
 
 ## Created and Maintained by:
  <a href="https://app.hackthebox.com/users/254685"><img src="http://www.hackthebox.eu/badge/image/254685" alt="Hack The Box"></a>
