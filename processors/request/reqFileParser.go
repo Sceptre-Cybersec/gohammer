@@ -25,6 +25,10 @@ func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout
 		body = bodyGroups[1]
 	}
 
+	//remove any newlines at end of body
+	removeNewlines := regexp.MustCompile(`(?s)(?:\n|\r)*\z`)
+	body = removeNewlines.ReplaceAllString(body, "")
+
 	// remove the body content
 	parsedReqFile := getContent.ReplaceAllString(reqContent, "")
 
