@@ -18,7 +18,7 @@ func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout
 	}
 	path := urlBase + pathGroups[1]
 
-	getContent := regexp.MustCompile(`(?s)\r\n\r\n(.*)`)
+	getContent := regexp.MustCompile(`(?s)(?:\r\n\r\n|\n\n)(.*)`)
 	bodyGroups := getContent.FindStringSubmatch(reqContent)
 	body := ""
 	if len(bodyGroups) > 1 {
