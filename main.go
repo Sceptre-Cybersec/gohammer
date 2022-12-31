@@ -23,22 +23,20 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 		//retry request x times unless it succeeds
 		success := false
 		r := args.GeneralOptions.Retry
-		var err error
 		var status bool
 
 		//request retry section
 		index := 1
 		for ; r >= 0 && !success; r-- {
-			status, err = agent.Send(positions, counter, args)
+			status, _ = agent.Send(positions, counter, args)
 			success = success || status
 			index = index + 1
 		}
-		// fmt.Println(index)
 		if !success {
 			counter.ErrorCounterInc()
-			fmt.Println(err.Error())
 		} else {
 			counter.CounterInc()
+			// TODO add error logging here
 		}
 		positions, ok = <-positionsChan
 	}
@@ -179,7 +177,7 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println()
 		fmt.Println("General Options:")
 		fmt.Println("-t\tThe number of concurrent threads [Default:10]")
-		fmt.Println("-retry\tThe number of times to retry a failed request before giving up [Default:0]")
+		fmt.Println("-retry\tThe number of times to retry a failed request before giving up [Default:3]")
 		fmt.Println("-dos\tRun a denial of service attack (for stress testing) [Default:false]")
 		fmt.Println()
 		fmt.Println("Recursion Options:")
@@ -253,7 +251,7 @@ func parseArgs(args []string) *config.Args {
 
 	// General Options
 	flag.IntVar(&(progArgs.GeneralOptions.Threads), "t", 10, "")
-	flag.IntVar(&(progArgs.GeneralOptions.Retry), "retry", 0, "")
+	flag.IntVar(&(progArgs.GeneralOptions.Retry), "retry", 3, "")
 	flag.BoolVar(&(progArgs.GeneralOptions.Dos), "dos", false, "")
 
 	// Recursion Options
