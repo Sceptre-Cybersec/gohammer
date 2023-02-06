@@ -184,6 +184,7 @@ func parseArgs(args []string) *config.Args {
 		fmt.Println("-rd\tThe recursion depth of the search. Set to 0 for unlimited recursion, 1 for no recursion [Default:1]")
 		fmt.Println("-rp\tThe position to recurse on [Default:0]")
 		fmt.Println("-rdl\tThe string to append to the base string when recursing [Default:'/']")
+		fmt.Println("-rc\tResponse codes to recurse on [Default:'301,302,303,307,308']")
 		fmt.Println()
 		fmt.Println("Filter Options:")
 		fmt.Println("-mc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
@@ -258,6 +259,7 @@ func parseArgs(args []string) *config.Args {
 	flag.IntVar(&(progArgs.RecursionOptions.Depth), "rd", 1, "")
 	flag.IntVar(&(progArgs.RecursionOptions.RecursePosition), "rp", 0, "")
 	flag.StringVar(&(progArgs.RecursionOptions.RecurseDelimeter), "rdl", "/", "")
+	flag.Var(&(progArgs.RecursionOptions.RecurseCode), "rc", "")
 
 	// Wordlist Options
 	flag.BoolVar(&(progArgs.WordlistOptions.NoBrute), "no-brute", false, "")
@@ -293,6 +295,10 @@ func parseArgs(args []string) *config.Args {
 func loadDefaults(args *config.Args) {
 	if len(args.FilterOptions.Mc) <= 0 {
 		args.FilterOptions.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
+	}
+
+	if len(args.RecursionOptions.RecurseCode) <= 0 {
+		args.RecursionOptions.RecurseCode.Set("301,302,303,307,308")
 	}
 }
 

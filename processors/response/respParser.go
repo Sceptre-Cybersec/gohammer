@@ -65,8 +65,7 @@ func NewRespFromHttp(resp *http.Response, respTime int, err error) *Resp {
 }
 
 // IsRecurse determines if a value response code corresponds to a web folder
-func (r *Resp) IsRecurse() bool {
-	codes := []int{301, 302, 303, 307, 308}
+func (r *Resp) IsRecurse(codes []int) bool {
 	ret := false
 	for _, c := range codes {
 		if c == r.Code {
@@ -94,7 +93,7 @@ func (resp *Resp) ProcessResp(positions []string, counter *utils.Counter, args *
 		cap.ApplyCapture()
 	}
 
-	if resp.IsRecurse() {
+	if resp.IsRecurse(args.RecursionOptions.RecurseCode) {
 		utils.FrontierLock.Lock()
 		// add current position to base string of Frontier[0] and add it to the frontier
 		utils.FrontierQ = append(utils.FrontierQ, append(utils.FrontierQ[0], positions[args.RecursionOptions.RecursePosition]+args.RecursionOptions.RecurseDelimeter))
