@@ -198,6 +198,7 @@ func TestRecursion(t *testing.T) {
 	args.RecursionOptions.Depth = 3
 	args.GeneralOptions.Retry = 0
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
+	args.RecursionOptions.RecurseCode = []int{301}
 	go recurseFuzz(agent, counter, &args)
 	url1 := <-urlChan
 	url2 := <-urlChan

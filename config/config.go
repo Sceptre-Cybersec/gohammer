@@ -103,6 +103,7 @@ type RecursionOptions struct {
 	Depth            int
 	RecursePosition  int
 	RecurseDelimeter string
+	RecurseCode      multiSplitIntFlag
 }
 
 type WordlistOptions struct {

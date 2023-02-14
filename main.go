@@ -22,11 +22,11 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 		//retry request x times unless it succeeds
 		success := false
 		r := args.GeneralOptions.Retry
-		var err error
 		var status bool
 
 		//request retry section
 		index := 1
+		var err error
 		for ; r >= 0 && !success; r-- {
 			status, err = agent.Send(positions, counter, args)
 			success = success || status
@@ -37,6 +37,7 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 			args.OutputOptions.Logger.Println(err.Error())
 		} else {
 			counter.CounterInc()
+			// TODO add error logging here
 		}
 		positions, ok = <-positionsChan
 	}
@@ -177,16 +178,17 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 		log.Println("")
 		log.Println("General Options:")
 		log.Println("-t\tThe number of concurrent threads [Default:10]")
-		log.Println("-retry\tThe number of times to retry a failed request before giving up [Default:0]")
+		log.Println("-retry\tThe number of times to retry a failed request before giving up [Default:3]")
 		log.Println("-dos\tRun a denial of service attack (for stress testing) [Default:false]")
 		log.Println("")
 		log.Println("Recursion Options:")
 		log.Println("-rd\tThe recursion depth of the search. Set to 0 for unlimited recursion, 1 for no recursion [Default:1]")
 		log.Println("-rp\tThe position to recurse on [Default:0]")
 		log.Println("-rdl\tThe string to append to the base string when recursing [Default:'/']")
+		log.Println("-rc\tResponse codes to recurse on [Default:'301,302,303,307,308']")
 		log.Println("")
 		log.Println("Filter Options:")
-		log.Println("-mc\tThe http response codes to match, use 'all' for all codes [Default:'200,204,301,302,303,307,308,400,401,403,405,500']")
+		log.Println("-mc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
 		log.Println("-ms\tMatch http response by size")
 		log.Println("-mw\tMatch http response by number of words")
 		log.Println("-ml\tMatch http response by number of lines")
@@ -251,13 +253,14 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 
 	// General Options
 	flag.IntVar(&(progArgs.GeneralOptions.Threads), "t", 10, "")
-	flag.IntVar(&(progArgs.GeneralOptions.Retry), "retry", 0, "")
+	flag.IntVar(&(progArgs.GeneralOptions.Retry), "retry", 3, "")
 	flag.BoolVar(&(progArgs.GeneralOptions.Dos), "dos", false, "")
 
 	// Recursion Options
 	flag.IntVar(&(progArgs.RecursionOptions.Depth), "rd", 1, "")
 	flag.IntVar(&(progArgs.RecursionOptions.RecursePosition), "rp", 0, "")
 	flag.StringVar(&(progArgs.RecursionOptions.RecurseDelimeter), "rdl", "/", "")
+	flag.Var(&(progArgs.RecursionOptions.RecurseCode), "rc", "")
 
 	// Wordlist Options
 	flag.BoolVar(&(progArgs.WordlistOptions.NoBrute), "no-brute", false, "")
@@ -293,6 +296,10 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 func loadDefaults(args *config.Args) {
 	if len(args.FilterOptions.Mc) <= 0 {
 		args.FilterOptions.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
+	}
+
+	if len(args.RecursionOptions.RecurseCode) <= 0 {
+		args.RecursionOptions.RecurseCode.Set("301,302,303,307,308")
 	}
 }
 
