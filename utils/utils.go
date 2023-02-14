@@ -19,13 +19,13 @@ var TotalJobs int
 
 // replacePosition scans a string for the position marker and replaces it with a word
 // from the corresponding wordlist
-func ReplacePosition(str string, positions []string, recursePos int) string {
+func ReplacePosition(str string, positions []string, recursePos int, log *Logger) string {
 	r := regexp.MustCompile(`@(\d+)@`)
 	res := r.FindAllStringSubmatch(str, -1)
 	for _, match := range res {
 		posIdx, err := strconv.Atoi(match[1])
 		if err != nil {
-			fmt.Println("Error converting position index to integer")
+			log.Println("Error converting position index to integer")
 			os.Exit(1)
 		}
 		baseStr := ""
@@ -40,17 +40,17 @@ func ReplacePosition(str string, positions []string, recursePos int) string {
 }
 
 // PrintProgressLoop prints the current progress to stdout every second and adds the current request/second to an array
-func PrintProgressLoop(counter *Counter, dos bool) {
+func PrintProgressLoop(counter *Counter, dos bool, log *Logger) {
 	for {
 		time.Sleep(1 * time.Second)
 		counter.UpdateAvg()
-		PrintProgress(counter, dos)
+		PrintProgress(counter, dos, log)
 	}
 }
 
 // PrintProgress prints the formatted progress string to stdout and computes the request/second average using an array
 // populated by PrintProgressLoop
-func PrintProgress(counter *Counter, dos bool) {
+func PrintProgress(counter *Counter, dos bool, log *Logger) {
 	avg := counter.GetCountAvg()
 	var progressString string
 	if !dos {
@@ -58,7 +58,7 @@ func PrintProgress(counter *Counter, dos bool) {
 	} else {
 		progressString = fmt.Sprintf("\r\033[KProgress: %d - %d/s - Errors: %d", counter.GetCountNum(), avg, counter.GetErrorNum())
 	}
-	fmt.Print(progressString)
+	log.Print(progressString)
 }
 
 // RemoveTrailingNewLine corrects the request file. Some text editors add a trailing new line to a file after saving.
@@ -91,12 +91,12 @@ func SetDif(a, b []int) (diff []int) {
 
 // GetNumJobs computes the number of jobs based on the file length and number of fuzzing positions
 // Returns the total number of jobs
-func GetNumJobs(fnames []string, noBrute bool, extensions []string) int {
+func GetNumJobs(fnames []string, noBrute bool, extensions []string, log *Logger) int {
 	var files []*bufio.Scanner
 	for _, fname := range fnames {
 		f, err := os.Open(fname)
 		if err != nil {
-			fmt.Printf("Error opening %s\n", fnames[0])
+			log.Printf("Error opening %s\n", fnames[0])
 			os.Exit(1)
 		}
 		files = append(files, bufio.NewScanner(f))
@@ -107,7 +107,7 @@ func GetNumJobs(fnames []string, noBrute bool, extensions []string) int {
 	for _, f := range files[1:] {
 		len := getFileLen(f)
 		if len == 0 {
-			fmt.Println("Error: empty file")
+			log.Println("Error: empty file")
 			os.Exit(1)
 		}
 		if !noBrute {

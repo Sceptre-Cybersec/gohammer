@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -33,10 +32,9 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 			success = success || status
 			index = index + 1
 		}
-		// fmt.Println(index)
 		if !success {
 			counter.ErrorCounterInc()
-			fmt.Println(err.Error())
+			args.OutputOptions.Logger.Println(err.Error())
 		} else {
 			counter.CounterInc()
 		}
@@ -72,7 +70,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 
 		f, err := os.Open(fnames[0])
 		if err != nil {
-			fmt.Printf("Error opening %s\n", fnames[0])
+			args.OutputOptions.Logger.Printf("Error opening %s\n", fnames[0])
 			os.Exit(1)
 		}
 		defer f.Close()
@@ -89,7 +87,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 		for _, fname := range fnames { //open all files
 			f, err := os.Open(fname)
 			if err != nil {
-				fmt.Printf("Error opening %s\n", fname)
+				args.OutputOptions.Logger.Printf("Error opening %s\n", fname)
 				os.Exit(1)
 			}
 			files = append(files, f)
@@ -128,12 +126,12 @@ func recurseFuzz(agent *request.ReqAgentHttp, counter *utils.Counter, args *conf
 	for i := 0; len(utils.FrontierQ) > 0; i++ { // iteratively search web directories
 		if len(utils.FrontierQ[0]) > args.RecursionOptions.Depth && args.RecursionOptions.Depth > 0 {
 			if args.RecursionOptions.Depth > 1 { //if recursion is on then display message
-				fmt.Printf("\r\033[KSkipping Recursion Job Due to Depth Exceeded on: %s\n", strings.Join(utils.FrontierQ[0], ""))
+				args.OutputOptions.Logger.Printf("\r\033[KSkipping Recursion Job Due to Depth Exceeded on: %s\n", strings.Join(utils.FrontierQ[0], ""))
 			}
 		} else {
 			if i > 0 {
-				// fmt.Print("\r\033[K\n")
-				fmt.Printf("\r\033[KStarting Recursion Job on: %s\n", strings.Join(utils.FrontierQ[0], ""))
+				// log.Print("\r\033[K\n")
+				args.OutputOptions.Logger.Printf("\r\033[KStarting Recursion Job on: %s\n", strings.Join(utils.FrontierQ[0], ""))
 				counter.Reset()
 			}
 			reqChan := make(chan []string, 1000)
@@ -162,85 +160,85 @@ func recurseFuzz(agent *request.ReqAgentHttp, counter *utils.Counter, args *conf
 }
 
 // parseArgs processes and packs command line arguments into a struct
-func parseArgs(args []string) *config.Args {
+func parseArgs(args []string, log *utils.Logger) *config.Args {
 	var progArgs config.Args
 	flag.Usage = func() {
-		fmt.Println()
-		fmt.Println("Usage: gohammer [options] wordlist1 wordlist2 ...")
-		fmt.Println()
-		fmt.Println("Request Options:")
-		fmt.Println("-u\tThe URL of the website to fuzz [Default:'http://127.0.0.1/']")
-		fmt.Println("-d\tThe data to provide in the request")
-		fmt.Println("-f\tThe request template file to use (Usually a request file saved from BurpSuite)")
-		fmt.Println("-H\tList of headers, one per flag: -H 'Header1: value1' -H 'Header2: value2'")
-		fmt.Println("-to\tThe timeout for each web request [Default:5]")
-		fmt.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
-		fmt.Println("-proxy\tThe proxy to send the requests through: Example http://127.0.0.1:8080 [Default: no proxy]")
-		fmt.Println()
-		fmt.Println("General Options:")
-		fmt.Println("-t\tThe number of concurrent threads [Default:10]")
-		fmt.Println("-retry\tThe number of times to retry a failed request before giving up [Default:0]")
-		fmt.Println("-dos\tRun a denial of service attack (for stress testing) [Default:false]")
-		fmt.Println()
-		fmt.Println("Recursion Options:")
-		fmt.Println("-rd\tThe recursion depth of the search. Set to 0 for unlimited recursion, 1 for no recursion [Default:1]")
-		fmt.Println("-rp\tThe position to recurse on [Default:0]")
-		fmt.Println("-rdl\tThe string to append to the base string when recursing [Default:'/']")
-		fmt.Println()
-		fmt.Println("Filter Options:")
-		fmt.Println("-mc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
-		fmt.Println("-ms\tMatch http response by size")
-		fmt.Println("-mw\tMatch http response by number of words")
-		fmt.Println("-ml\tMatch http response by number of lines")
-		fmt.Println("-mr\tMatch http response by regular expression in response body")
-		fmt.Println("-mt\tMatch responses that take longer than or equal to the specified time in miliseconds")
-		fmt.Println("-fc\tThe http response codes to filter")
-		fmt.Println("-fs\tFilter http response by size")
-		fmt.Println("-fw\tFilter http response by number of words")
-		fmt.Println("-fl\tFilter http response by number of lines")
-		fmt.Println("-fr\tFilter http response by regular expression in response body")
-		fmt.Println("-ft\tFilter responses that take longer than or equal to the specified time in miliseconds")
-		fmt.Println()
-		fmt.Println("Capture Options:")
-		fmt.Println("-capture\tThe regular expression used to capture data from the response. Data is saved into cap.txt by default")
-		fmt.Println("-capture-group\tThe regular expression group to capture 0 is the whole match and 1 is the first group, 2 is the second, etc")
-		fmt.Println("-capture-file\tThe file to save the captured data [Default: 'cap.txt']")
-		fmt.Println()
-		fmt.Println("Wordlist Options:")
-		fmt.Println("-brute\tWhether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line. [Default:true]")
-		fmt.Println("-e\tThe comma separated file extensions to fuzz with. Example: '.txt,.php,.html'")
-		fmt.Println()
-		fmt.Println("Transforms: Transforms are a versitile tool that allows you to use functions to mutate your wordlists on the fly")
-		fmt.Println("-transform\tThe transform string to apply to your wordlist. To use multiple transforms, supply the flag multiple times: -transform <transform1> -transform <transform2> ...")
-		fmt.Println("Transform Syntax:")
-		fmt.Println("\t\t" + `For transforms there are two object types, functions and strings. A function is any string followed by opening and closing brackets,
+		log.Println("")
+		log.Println("Usage: gohammer [options] wordlist1 wordlist2 ...")
+		log.Println("")
+		log.Println("Request Options:")
+		log.Println("-u\tThe URL of the website to fuzz [Default:'http://127.0.0.1/']")
+		log.Println("-d\tThe data to provide in the request")
+		log.Println("-f\tThe request template file to use (Usually a request file saved from BurpSuite)")
+		log.Println("-H\tList of headers, one per flag: -H 'Header1: value1' -H 'Header2: value2'")
+		log.Println("-to\tThe timeout for each web request [Default:5]")
+		log.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
+		log.Println("-proxy\tThe proxy to send the requests through: Example http://127.0.0.1:8080 [Default: no proxy]")
+		log.Println("")
+		log.Println("General Options:")
+		log.Println("-t\tThe number of concurrent threads [Default:10]")
+		log.Println("-retry\tThe number of times to retry a failed request before giving up [Default:0]")
+		log.Println("-dos\tRun a denial of service attack (for stress testing) [Default:false]")
+		log.Println("")
+		log.Println("Recursion Options:")
+		log.Println("-rd\tThe recursion depth of the search. Set to 0 for unlimited recursion, 1 for no recursion [Default:1]")
+		log.Println("-rp\tThe position to recurse on [Default:0]")
+		log.Println("-rdl\tThe string to append to the base string when recursing [Default:'/']")
+		log.Println("")
+		log.Println("Filter Options:")
+		log.Println("-mc\tThe http response codes to match, use 'all' for all codes [Default:'200,204,301,302,303,307,308,400,401,403,405,500']")
+		log.Println("-ms\tMatch http response by size")
+		log.Println("-mw\tMatch http response by number of words")
+		log.Println("-ml\tMatch http response by number of lines")
+		log.Println("-mr\tMatch http response by regular expression in response body")
+		log.Println("-mt\tMatch responses that take longer than or equal to the specified time in miliseconds")
+		log.Println("-fc\tThe http response codes to filter")
+		log.Println("-fs\tFilter http response by size")
+		log.Println("-fw\tFilter http response by number of words")
+		log.Println("-fl\tFilter http response by number of lines")
+		log.Println("-fr\tFilter http response by regular expression in response body")
+		log.Println("-ft\tFilter responses that take longer than or equal to the specified time in miliseconds")
+		log.Println("")
+		log.Println("Capture Options:")
+		log.Println("-capture\tThe regular expression used to capture data from the response. Data is saved into cap.txt by default")
+		log.Println("-capture-group\tThe regular expression group to capture 0 is the whole match and 1 is the first group, 2 is the second, etc")
+		log.Println("-capture-file\tThe file to save the captured data [Default: 'cap.txt']")
+		log.Println("")
+		log.Println("Wordlist Options:")
+		log.Println("-brute\tWhether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line. [Default:true]")
+		log.Println("-e\tThe comma separated file extensions to fuzz with. Example: '.txt,.php,.html'")
+		log.Println("")
+		log.Println("Transforms: Transforms are a versitile tool that allows you to use functions to mutate your wordlists on the fly")
+		log.Println("-transform\tThe transform string to apply to your wordlist. To use multiple transforms, supply the flag multiple times: -transform <transform1> -transform <transform2> ...")
+		log.Println("Transform Syntax:")
+		log.Println("\t\t" + `For transforms there are two object types, functions and strings. A function is any string followed by opening and closing brackets,
 		a string is anything else, (usually the argument to a function). For example, in the transform 'b64Encode(test)' b64Encode is the function and test is
 		the string. Note that quotes are not used to define a string. Once a transform is defined it can be referenced in a similar way to a wordlist: @t0@, @t1@, @t2@, etc.
 		Escape characters are supported but only needed for commas and braces: \, \( \)`)
-		fmt.Println()
-		fmt.Println("Example Transforms: b64Encode(@0@:@1@), concat(urlEncode(b64Encode(test1)),@0@,urlEncode(@0@))")
-		fmt.Println()
-		fmt.Println("Transform Functions:")
-		fmt.Println("\tb64Encode(string): takes a single string and returns a base 64 encoding of the string")
-		fmt.Println("\tb64Decode(string): takes a single base64 encoded string and returns the decoded string")
-		fmt.Println("\turlEncode(string): takes a single string and encodes unsafe url characters")
-		fmt.Println("\turlDecode(string): takes a single url encoded string and returns the decoded string")
-		fmt.Println("\t" + `concat(string, string, string, ...): takes any number of strings and returns all the strings joined together. Note that
+		log.Println("")
+		log.Println("Example Transforms: b64Encode(@0@:@1@), concat(urlEncode(b64Encode(test1)),@0@,urlEncode(@0@))")
+		log.Println("")
+		log.Println("Transform Functions:")
+		log.Println("\tb64Encode(string): takes a single string and returns a base 64 encoding of the string")
+		log.Println("\tb64Decode(string): takes a single base64 encoded string and returns the decoded string")
+		log.Println("\turlEncode(string): takes a single string and encodes unsafe url characters")
+		log.Println("\turlDecode(string): takes a single url encoded string and returns the decoded string")
+		log.Println("\t" + `concat(string, string, string, ...): takes any number of strings and returns all the strings joined together. Note that
 		concat is only needed when joinging the output of a function to another function, or to a string. It is not needed to join two strings`)
-		fmt.Println()
-		fmt.Println("Example Usage:")
-		fmt.Println()
-		fmt.Println("Standard Usage:")
-		fmt.Println("gohammer -u http://127.0.0.1/@0@ -t 32 -e .txt,.html,.php /home/me/myWordlist.txt")
-		fmt.Println()
-		fmt.Println("POST with data:")
-		fmt.Println("gohammer -u https://some.site.com/ -method POST -d '{\"user\":\"@0@\", \"password\":\"@1@\"}' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
-		fmt.Println()
-		fmt.Println("Request from File:")
-		fmt.Println("gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt")
-		fmt.Println()
-		fmt.Println("Transform Usage (HTTP Basic Auth):")
-		fmt.Println("gohammer -u https://some.site.com/ -H 'Authorization: @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+		log.Println("")
+		log.Println("Example Usage:")
+		log.Println("")
+		log.Println("Standard Usage:")
+		log.Println("gohammer -u http://127.0.0.1/@0@ -t 32 -e .txt,.html,.php /home/me/myWordlist.txt")
+		log.Println("")
+		log.Println("POST with data:")
+		log.Println("gohammer -u https://some.site.com/ -method POST -d '{\"user\":\"@0@\", \"password\":\"@1@\"}' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+		log.Println("")
+		log.Println("Request from File:")
+		log.Println("gohammer -u https://some.site.com/ -f /home/me/Desktop/burpReq.txt -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+		log.Println("")
+		log.Println("Transform Usage (HTTP Basic Auth):")
+		log.Println("gohammer -u https://some.site.com/ -H 'Authorization: @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 	}
 	// Request Options
 	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "http://127.0.0.1/", "")
@@ -299,20 +297,24 @@ func loadDefaults(args *config.Args) {
 }
 
 // banner prints the title banner
-func banner() {
-	fmt.Println("+----------------------------------------+")
-	fmt.Println("|GOHAMMER 🔨 - A Web Fuzzer Written in GO|")
-	fmt.Println("+----------------------------------------+")
+func banner(log *utils.Logger) {
+	log.Println("+----------------------------------------+")
+	log.Println("|GOHAMMER 🔨 - A Web Fuzzer Written in GO|")
+	log.Println("+----------------------------------------+")
 }
 
 func main() {
-	banner()
 
-	args := parseArgs(os.Args)
+	initLogger := utils.NewLogger(utils.INFO, os.Stdout)
+	banner(initLogger)
+	args := parseArgs(os.Args, initLogger)
 	loadDefaults(args)
 
+	log := utils.NewLogger(utils.INFO, os.Stdout)
+	args.OutputOptions.Logger = log
+
 	if len(args.WordlistOptions.Files) <= 0 && !args.GeneralOptions.Dos {
-		fmt.Println("Please specify a wordlist unless you are using DOS mode")
+		log.Println("Please specify a wordlist unless you are using DOS mode")
 		os.Exit(1)
 	}
 
@@ -321,7 +323,7 @@ func main() {
 	if args.RequestOptions.ReqFile != "" {
 		fileBytes, err := ioutil.ReadFile(args.RequestOptions.ReqFile)
 		if err != nil {
-			fmt.Printf("Error: couldn't open %s\n", args.RequestOptions.ReqFile)
+			log.Printf("Error: couldn't open %s\n", args.RequestOptions.ReqFile)
 			os.Exit(1)
 		}
 		reqFileContent = utils.RemoveTrailingNewline(string(fileBytes))
@@ -334,7 +336,7 @@ func main() {
 	args.WordlistOptions.Extensions = append(args.WordlistOptions.Extensions, "")
 
 	if !args.GeneralOptions.Dos {
-		utils.TotalJobs = utils.GetNumJobs(args.WordlistOptions.Files, args.WordlistOptions.NoBrute, args.WordlistOptions.Extensions)
+		utils.TotalJobs = utils.GetNumJobs(args.WordlistOptions.Files, args.WordlistOptions.NoBrute, args.WordlistOptions.Extensions, log)
 	}
 
 	var agent *request.ReqAgentHttp
@@ -348,8 +350,8 @@ func main() {
 	}
 
 	counter := utils.NewCounter()
-	go utils.PrintProgressLoop(counter, args.GeneralOptions.Dos)
+	go utils.PrintProgressLoop(counter, args.GeneralOptions.Dos, log)
 	recurseFuzz(agent, counter, args)
-	utils.PrintProgress(counter, args.GeneralOptions.Dos)
-	fmt.Println()
+	utils.PrintProgress(counter, args.GeneralOptions.Dos, log)
+	log.Println("")
 }
