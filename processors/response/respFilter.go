@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 
 	"github.com/wadeking98/gohammer/config"
 )
@@ -30,6 +31,7 @@ func (f *Filter) ApplyFilters(args *config.Args) bool {
 			break
 		}
 	}
+	args.OutputOptions.Logger.Test("Passed all filters: " + strconv.FormatBool(passed))
 	return passed
 }
 
@@ -48,6 +50,11 @@ func passedTimeFilter(resp *Resp, args *config.Args) bool {
 // and logs it to stdout if it is found
 func passedCodeFound(resp *Resp, args *config.Args) bool {
 	mcFound := false
+	//check if use supplied all codes
+	if len(args.FilterOptions.Mc) > 0 && args.FilterOptions.Mc[0] == -1 {
+		return true
+	}
+	//else scan through accepted response codes
 	for _, i := range args.FilterOptions.Mc {
 		if resp.Code == i {
 			mcFound = true

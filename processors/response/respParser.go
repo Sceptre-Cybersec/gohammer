@@ -84,8 +84,8 @@ func (resp *Resp) ProcessResp(positions []string, counter *utils.Counter, args *
 		displayPos := make([]string, len(positions))
 		copy(displayPos, positions)
 		displayPos[args.RecursionOptions.RecursePosition] = strings.Join(utils.FrontierQ[0], "") + positions[args.RecursionOptions.RecursePosition]
-		fmt.Println(respLineFormatter(resp.Code, resp.Size, resp.Words, resp.Lines, resp.Time, displayPos, 12))
-		utils.PrintProgress(counter, args.GeneralOptions.Dos)
+		args.OutputOptions.Logger.Println(respLineFormatter(resp.Code, resp.Size, resp.Words, resp.Lines, resp.Time, displayPos, 12))
+		utils.PrintProgress(counter, args.GeneralOptions.Dos, args.OutputOptions.Logger)
 	}
 
 	if args.CaptureOptions.Cap != "" {

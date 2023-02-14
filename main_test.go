@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -22,14 +24,19 @@ func reqHandle(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.String(), "/recurse") {
 		urlChan <- r.URL.String()
 		w.WriteHeader(301)
+	} else if strings.HasPrefix(r.URL.String(), "/allCodes") {
+		w.WriteHeader(404)
+	} else if strings.HasPrefix(r.URL.String(), "/headers") {
+		urlChan <- r.URL.String()
+		httpChan <- r.Host
+		httpChan <- r.Header["Content-Type"][0]
+		fmt.Fprint(w, "OK")
 	} else {
 		body, err := ioutil.ReadAll(r.Body)
 		if err == nil && strings.HasPrefix(r.URL.String(), "/data") {
 			bodyChan <- string(body)
 		}
 		urlChan <- r.URL.String()
-		httpChan <- r.Host
-		httpChan <- r.Header["Content-Type"][0]
 		fmt.Fprint(w, "OK")
 	}
 }
@@ -43,12 +50,12 @@ func TestSetup(t *testing.T) {
 			fmt.Println("Setup Failed")
 		}
 	}()
-	time.Sleep(1 * time.Second)
+	time.Sleep(time.Duration(0.25 * float64(time.Second)))
 }
 
 func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/headers/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
@@ -59,16 +66,16 @@ func TestSendReq(t *testing.T) {
 	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
 	args.WordlistOptions.NoBrute = true
 	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	go sendReq(reqChan, agent, counter, &args)
 	reqChan <- []string{"a", "b"}
 	close(reqChan)
 	urlResp := <-urlChan
-	if urlResp != "/ab" {
+	if urlResp != "/headers/ab" {
 		t.Fatal("URL Fuzzing Failed")
 	}
 	hostResp := <-httpChan
 	if hostResp != "ab" {
-		fmt.Println(hostResp)
 		t.Fatal("Host Fuzzing Failed")
 	}
 	headerResp := <-httpChan
@@ -91,6 +98,7 @@ func TestBrute(t *testing.T) {
 	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
 	args.WordlistOptions.NoBrute = true
 	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	go sendReq(reqChan, agent, counter, &args)
 
 	go sendReq(reqChan, agent, counter, &args)
@@ -122,6 +130,7 @@ func TestExtensions(t *testing.T) {
 		args.RecursionOptions.RecursePosition = 0
 		args.RecursionOptions.RecurseDelimeter = ""
 		args.GeneralOptions.Retry = 0
+		args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 		go sendReq(reqChan, agent, counter, &args)
 	}
 
@@ -129,6 +138,7 @@ func TestExtensions(t *testing.T) {
 	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
 	args.WordlistOptions.NoBrute = true
 	args.WordlistOptions.Extensions = []string{".txt", ".php"}
+	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	tests := []string{"/a.php_c.php", "/a.txt_c.txt", "/b.txt_d.txt", "/b.php_d.php"}
@@ -160,6 +170,7 @@ func TestPostData(t *testing.T) {
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	go sendReq(reqChan, agent, counter, &args)
 	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
@@ -186,20 +197,21 @@ func TestRecursion(t *testing.T) {
 	args.WordlistOptions.Extensions = []string{""}
 	args.RecursionOptions.Depth = 3
 	args.GeneralOptions.Retry = 0
+	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	args.RecursionOptions.RecurseCode = []int{301}
 	go recurseFuzz(agent, counter, &args)
 	url1 := <-urlChan
 	url2 := <-urlChan
 	url3 := <-urlChan
-	time.Sleep(1 * time.Second)
 	if url1 != "/recurse/c" || url2 != "/recurse/c/c" || url3 != "/recurse/c/c/c" {
 		t.Fatalf("recursion failed %s %s %s\n", url1, url2, url3)
 	}
 }
 
 func TestNumJobs(t *testing.T) {
-	numJobsBrute := utils.GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, false, []string{"", ".txt"})
-	numJobs := utils.GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"})
+	log := utils.NewLogger(utils.NONE, os.Stdout)
+	numJobsBrute := utils.GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, false, []string{"", ".txt"}, log)
+	numJobs := utils.GetNumJobs([]string{"tests/a.txt", "tests/b.txt", "tests/c.txt"}, true, []string{"", ".txt"}, log)
 	if numJobs != 4 && numJobsBrute != 16 {
 		t.Fatal("Incorrect number of jobs")
 	}
@@ -223,6 +235,8 @@ func TestFileToReq(t *testing.T) {
 }
 
 func TestFilePost(t *testing.T) {
+	// reset frontierQ
+	utils.FrontierQ = [][]string{{""}}
 	fileBytes, err := ioutil.ReadFile("tests/reqFilePost.txt")
 	if err != nil {
 		fmt.Println("Error: couldn't open file")
@@ -241,12 +255,12 @@ func TestFilePost(t *testing.T) {
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	go sendReq(reqChan, agent, counter, &args)
 	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	resp := <-bodyChan
 	<-urlChan
-	fmt.Println(resp)
 	if resp != "test=helloc" {
 		t.Fatal("invalid post data")
 	}
@@ -273,6 +287,7 @@ func TestTransformRequests(t *testing.T) {
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.Extensions = []string{""}
 	args.TransformOptions.Transforms = []string{"urlEncode(concat(b64Encode(@0@:test!),\\,,b64Encode(@0@:hello)))"}
+	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	reqChan := make(chan []string)
 	go sendReq(reqChan, agent, counter, &args)
 	procFiles(nil, reqChan, &args, 0)
@@ -280,5 +295,29 @@ func TestTransformRequests(t *testing.T) {
 	resp := <-urlChan
 	if resp != "/Yzp0ZXN0IQ%3D%3D%2CYzpoZWxsbw%3D%3D" {
 		t.Fatal("Unexpected Transform output")
+	}
+}
+
+func TestMCAll(t *testing.T) {
+	buf := new(bytes.Buffer)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/allCodes/@0@", "GET", []string{}, "", "", 5)
+	counter := utils.NewCounter()
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{-1}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimeter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
+	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.TESTING, buf)
+	reqChan := make(chan []string)
+	go sendReq(reqChan, agent, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
+	close(reqChan)
+	time.Sleep(time.Duration(0.25 * float64(time.Second)))
+	out, _ := buf.ReadString(byte(0))
+	if !strings.Contains(out, "Passed all filters: true") {
+		t.Fatal("Match all codes failed")
 	}
 }

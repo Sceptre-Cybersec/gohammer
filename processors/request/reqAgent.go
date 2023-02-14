@@ -147,13 +147,13 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 // ProcReqTemplate applies words from a set of wordlists to a request template
 // Returns the parsed request template
 func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args) *ReqTemplate {
-	url := utils.ReplacePosition(reqAgent.GetUrl(), positions, args.RecursionOptions.RecursePosition)
-	method := utils.ReplacePosition(reqAgent.GetMethod(), positions, args.RecursionOptions.RecursePosition)
+	url := utils.ReplacePosition(reqAgent.GetUrl(), positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger)
+	method := utils.ReplacePosition(reqAgent.GetMethod(), positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger)
 	var headers []string
 	for _, header := range reqAgent.GetHeaders() {
-		headers = append(headers, utils.ReplacePosition(header, positions, args.RecursionOptions.RecursePosition))
+		headers = append(headers, utils.ReplacePosition(header, positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger))
 	}
-	body := utils.ReplacePosition(reqAgent.GetBody(), positions, args.RecursionOptions.RecursePosition)
+	body := utils.ReplacePosition(reqAgent.GetBody(), positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger)
 
 	if len(args.TransformOptions.Transforms) > 0 {
 		// apply transforms too
@@ -162,14 +162,14 @@ func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Ar
 		for _, transTemplate := range args.TransformOptions.Transforms {
 			transformPostions = append(transformPostions, transforms.ApplyTransforms(transTemplate, reqAgent.transformList, positions, args))
 		}
-		url = transforms.ReplaceTranformPosition(url, transformPostions)
-		method = transforms.ReplaceTranformPosition(method, transformPostions)
+		url = transforms.ReplaceTranformPosition(url, transformPostions, args.OutputOptions.Logger)
+		method = transforms.ReplaceTranformPosition(method, transformPostions, args.OutputOptions.Logger)
 		var transformedHeaders []string
 		for _, header := range headers {
-			transformedHeaders = append(headers, transforms.ReplaceTranformPosition(header, transformPostions))
+			transformedHeaders = append(headers, transforms.ReplaceTranformPosition(header, transformPostions, args.OutputOptions.Logger))
 		}
 		headers = transformedHeaders
-		body = transforms.ReplaceTranformPosition(body, transformPostions)
+		body = transforms.ReplaceTranformPosition(body, transformPostions, args.OutputOptions.Logger)
 	}
 	return NewReqTemplate(url, method, headers, body)
 }

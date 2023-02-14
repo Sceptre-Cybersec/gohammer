@@ -1,7 +1,6 @@
 package transforms
 
 import (
-	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -17,18 +16,18 @@ func ApplyTransforms(transfromTemplates string, transforms TransformList, positi
 	funcName, args := getFuncAndArgs(transfromTemplates)
 	if funcName == "" {
 		outp := normalize(transfromTemplates)
-		return utils.ReplacePosition(outp, positions, conf.RecursionOptions.RecursePosition)
+		return utils.ReplacePosition(outp, positions, conf.RecursionOptions.RecursePosition, conf.OutputOptions.Logger)
 	} else if funcName != "" && len(args) > 0 {
 		var argList []string
 		for _, arg := range args {
 			argList = append(argList, ApplyTransforms(arg, transforms, positions, conf))
 		}
-		parsedFuncName := utils.ReplacePosition(funcName, positions, conf.RecursionOptions.RecursePosition)
+		parsedFuncName := utils.ReplacePosition(funcName, positions, conf.RecursionOptions.RecursePosition, conf.OutputOptions.Logger)
 		transFunc := transforms[parsedFuncName]
 		if transFunc != nil {
 			return transFunc(argList...)
 		} else {
-			fmt.Printf("Error: Invalid translation function %s\n", parsedFuncName)
+			conf.OutputOptions.Logger.Printf("Error: Invalid translation function %s\n", parsedFuncName)
 		}
 	}
 	return ""
@@ -36,13 +35,13 @@ func ApplyTransforms(transfromTemplates string, transforms TransformList, positi
 
 // ReplaceTransforms scans the specified string for transform positions (Ex: @t0@) and replaces them with the
 // corresponding position from the positions array
-func ReplaceTranformPosition(str string, positions []string) string {
+func ReplaceTranformPosition(str string, positions []string, log *utils.Logger) string {
 	r := regexp.MustCompile(`@t(\d+)@`)
 	res := r.FindAllStringSubmatch(str, -1)
 	for _, match := range res {
 		posIdx, err := strconv.Atoi(match[1])
 		if err != nil {
-			fmt.Println("Error converting position index to integer")
+			log.Println("Error converting position index to integer")
 			os.Exit(1)
 		}
 		if len(positions) > posIdx {
