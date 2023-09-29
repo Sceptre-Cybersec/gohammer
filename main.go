@@ -172,6 +172,7 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 		log.Println("-d\tThe data to provide in the request")
 		log.Println("-f\tThe request template file to use (Usually a request file saved from BurpSuite)")
 		log.Println("-H\tList of headers, one per flag: -H 'Header1: value1' -H 'Header2: value2'")
+		log.Println("-rH\tList of headers to remove, one per flag: -rH 'Connection', -rH 'Accept-Encoding' [Default 'Connection' and 'Accept-Encoding']")
 		log.Println("-to\tThe timeout for each web request [Default:5]")
 		log.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
 		log.Println("-proxy\tThe proxy to send the requests through: Example http://127.0.0.1:8080 [Default: no proxy]")
@@ -250,6 +251,7 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 	flag.StringVar(&(progArgs.RequestOptions.Method), "method", "GET", "")
 	flag.IntVar(&(progArgs.RequestOptions.Timeout), "to", 15, "")
 	flag.Var(&(progArgs.RequestOptions.Headers), "H", "")
+	flag.Var(&(progArgs.RequestOptions.RemoveHeaders), "rH", "")
 
 	// General Options
 	flag.IntVar(&(progArgs.GeneralOptions.Threads), "t", 10, "")
@@ -301,6 +303,12 @@ func loadDefaults(args *config.Args) {
 	if len(args.RecursionOptions.RecurseCode) <= 0 {
 		args.RecursionOptions.RecurseCode.Set("301,302,303,307,308")
 	}
+
+	if len(args.RequestOptions.RemoveHeaders) <= 0 {
+		args.RequestOptions.RemoveHeaders.Set("Connection")
+		args.RequestOptions.RemoveHeaders.Set("Accept-Encoding")
+	}
+
 }
 
 // banner prints the title banner
@@ -351,7 +359,7 @@ func main() {
 		if strings.HasSuffix(args.RequestOptions.Url, "/") {
 			args.RequestOptions.Url = args.RequestOptions.Url[:len(args.RequestOptions.Url)-1]
 		}
-		agent = request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy, args.RequestOptions.Timeout)
+		agent = request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.RemoveHeaders)
 	} else {
 		agent = request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy, args.RequestOptions.Timeout)
 	}

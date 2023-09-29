@@ -84,13 +84,14 @@ func (m *multiSplitIntFlag) Set(value string) error {
 }
 
 type RequestOptions struct {
-	Url     string
-	Proxy   string
-	Method  string
-	ReqFile string
-	Headers multiStringFlag
-	Timeout int
-	Data    string
+	Url           string
+	Proxy         string
+	Method        string
+	ReqFile       string
+	Headers       multiStringFlag
+	RemoveHeaders multiStringFlag
+	Timeout       int
+	Data          string
 }
 
 type GeneralOptions struct {

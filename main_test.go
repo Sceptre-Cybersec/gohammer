@@ -224,7 +224,7 @@ func TestFileToReq(t *testing.T) {
 	}
 	reqFileContent := string(fileBytes)
 
-	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5)
+	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5, []string{})
 	if agent.GetUrl() != "http://127.0.0.1:8888/data/@0@" || len(agent.GetHeaders()) != 16 || agent.GetMethod() != "POST" || agent.GetBody() != "test=hello@0@" {
 		fmt.Printf("URL: {%s}\n", agent.GetUrl())
 		fmt.Printf("Headers: {%d}\n", len(agent.GetHeaders()))
@@ -243,7 +243,7 @@ func TestFilePost(t *testing.T) {
 	}
 	reqFileContent := utils.RemoveTrailingNewline(string(fileBytes))
 
-	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5)
+	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5, []string{})
 
 	reqChan := make(chan []string)
 	counter := utils.NewCounter()

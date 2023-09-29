@@ -126,7 +126,10 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 			}
 		}
 	}
-
+	encoding := reqTemplate.Header.Get("Accept-Encoding")
+	if encoding == "" {
+		reqTemplate.Header.Set("Accept-Encoding", "*")
+	}
 	start := time.Now()
 	resp, err := req.client.Do(reqTemplate)
 	elapsed := int(time.Since(start) / time.Millisecond)
@@ -166,7 +169,7 @@ func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Ar
 		method = transforms.ReplaceTranformPosition(method, transformPostions, args.OutputOptions.Logger)
 		var transformedHeaders []string
 		for _, header := range headers {
-			transformedHeaders = append(headers, transforms.ReplaceTranformPosition(header, transformPostions, args.OutputOptions.Logger))
+			transformedHeaders = append(transformedHeaders, transforms.ReplaceTranformPosition(header, transformPostions, args.OutputOptions.Logger))
 		}
 		headers = transformedHeaders
 		body = transforms.ReplaceTranformPosition(body, transformPostions, args.OutputOptions.Logger)

@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 )
 
-func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout int) *ReqAgentHttp {
+func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout int, removeHeaders []string) *ReqAgentHttp {
 	getMethod := regexp.MustCompile(`\S+`)
 	method := getMethod.FindString(reqContent)
 
@@ -38,9 +39,20 @@ func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout
 	var cleanedHeaders []string
 	stripNL := regexp.MustCompile(`\r|\n`)
 	for _, header := range headersArr {
-		cleanedHeaders = append(cleanedHeaders, stripNL.ReplaceAllString(header, ""))
-	}
 
+		//skip headers if they're in the removal list
+		cleanHeader := stripNL.ReplaceAllString(header, "")
+		skip := false
+		for _, removeHeader := range removeHeaders {
+			if strings.HasPrefix(cleanHeader, removeHeader) {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			cleanedHeaders = append(cleanedHeaders, cleanHeader)
+		}
+	}
 	req := NewReqAgentHttp(path, method, cleanedHeaders, body, proxy, timeout)
 
 	return req
