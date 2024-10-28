@@ -3,7 +3,6 @@ package request
 import (
 	"bytes"
 	"crypto/tls"
-	"net"
 	"strconv"
 
 	// "crypto/tls"
@@ -47,24 +46,19 @@ func NewReqAgentHttp(reqUrl string, method string, headers []string, body string
 	client := &http.Client{
 		Timeout:       time.Duration(timeout * int(time.Second)),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
-		Transport: &http.Transport{
-			ForceAttemptHTTP2:   true,
-			MaxIdleConns:        1000,
-			MaxIdleConnsPerHost: 500,
-			MaxConnsPerHost:     500,
-			DialContext: (&net.Dialer{
-				Timeout: time.Duration(timeout * int(time.Second)),
-			}).DialContext,
-			TLSHandshakeTimeout: time.Duration(timeout * int(time.Second)),
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				Renegotiation:      tls.RenegotiateOnceAsClient,
-				ServerName:         "",
-			},
-		},
 	}
 
-	var transportConfig http.Transport
+	transportConfig := &http.Transport{
+		ForceAttemptHTTP2:   false,
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 500,
+		MaxConnsPerHost:     500,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			Renegotiation:      tls.RenegotiateOnceAsClient,
+			ServerName:         "",
+		},
+	}
 	// add http proxy if exists
 	if proxy != "" {
 		proxyUrl, err := url.Parse(proxy)
@@ -75,7 +69,7 @@ func NewReqAgentHttp(reqUrl string, method string, headers []string, body string
 		transportConfig.Proxy = http.ProxyURL(proxyUrl)
 	}
 
-	client.Transport = &transportConfig
+	client.Transport = transportConfig
 
 	transformList := transforms.NewTransformList()
 	return &ReqAgentHttp{
