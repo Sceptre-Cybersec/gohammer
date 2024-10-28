@@ -137,9 +137,17 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 		fmt.Printf("Elapsed: %d    \tTimeout:%d\n", elapsed, args.RequestOptions.Timeout)
 	}
 	r := response.NewRespFromHttp(resp, elapsed, err)
+
 	// not an error created by 301 without Location header
 	if r.Code == 0 && err != nil {
 		return false, err
+	}
+
+	// check if in user supplied error codes
+	for _, code := range args.FilterOptions.Ec {
+		if r.Code == code {
+			return false, err
+		}
 	}
 
 	r.ProcessResp(positions, counter, args)

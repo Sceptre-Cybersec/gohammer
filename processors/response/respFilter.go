@@ -127,7 +127,7 @@ func passedLengthMatch(resp *Resp, args *config.Args) bool {
 	return filterPassed
 }
 
-//lenFilterSearch returns true if the length is in the array of lengths
+// lenFilterSearch returns true if the length is in the array of lengths
 func lenFilterSearch(length int, lengths []int) bool {
 	ret := false
 	if len(lengths) > 0 {

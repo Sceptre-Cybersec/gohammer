@@ -31,10 +31,15 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 			status, err = agent.Send(positions, counter, args)
 			success = success || status
 			index = index + 1
+			if !success {
+				time.Sleep(time.Duration((1000 / args.RequestOptions.Rate) * int(time.Millisecond)))
+			}
 		}
 		if !success {
 			counter.ErrorCounterInc()
-			args.OutputOptions.Logger.Println(err.Error())
+			if err != nil {
+				args.OutputOptions.Logger.Println(err.Error())
+			}
 		} else {
 			counter.CounterInc()
 			// TODO add error logging here
@@ -45,7 +50,7 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 
 // procExtensions adds use specified file extensions onto fuzzing data and then sends the modified data
 // to the request channel which is picked up by the sendReq methods
-func procExtensions(currString []string, extensions []string, reqChan chan []string) {
+func procExtensions(currString []string, extensions []string, reqChan chan []string, rateLimit int) {
 	if len(extensions) <= 0 {
 		reqChan <- currString
 	}
@@ -54,6 +59,9 @@ func procExtensions(currString []string, extensions []string, reqChan chan []str
 		var extCurrString []string
 		for _, position := range currString {
 			extCurrString = append(extCurrString, position+ext)
+		}
+		if rateLimit > 0 {
+			time.Sleep(time.Duration((1000 / rateLimit) * int(time.Millisecond)))
 		}
 		reqChan <- extCurrString
 	}
@@ -65,7 +73,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 	if !args.WordlistOptions.NoBrute { //use recursive strategy
 		//send string to channel
 		if len(fnames) <= 0 {
-			procExtensions(currString, args.WordlistOptions.Extensions, reqChan)
+			procExtensions(currString, args.WordlistOptions.Extensions, reqChan, args.RequestOptions.Rate)
 			return
 		}
 
@@ -115,7 +123,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 			}
 			// send line to requests
 			if !EOF {
-				procExtensions(currLine, args.WordlistOptions.Extensions, reqChan)
+				procExtensions(currLine, args.WordlistOptions.Extensions, reqChan, args.RequestOptions.Rate)
 			}
 		}
 	}
@@ -124,6 +132,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 // recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
 // calls procFiles to start sending data over the channels
 func recurseFuzz(agent *request.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
+	// rateLimitMs := 1000 / args.RequestOptions.Rate
 	for i := 0; len(utils.FrontierQ) > 0; i++ { // iteratively search web directories
 		if len(utils.FrontierQ[0]) > args.RecursionOptions.Depth && args.RecursionOptions.Depth > 0 {
 			if args.RecursionOptions.Depth > 1 { //if recursion is on then display message
@@ -161,7 +170,7 @@ func recurseFuzz(agent *request.ReqAgentHttp, counter *utils.Counter, args *conf
 }
 
 // parseArgs processes and packs command line arguments into a struct
-func parseArgs(args []string, log *utils.Logger) *config.Args {
+func parseArgs(_ []string, log *utils.Logger) *config.Args {
 	var progArgs config.Args
 	flag.Usage = func() {
 		log.Println("")
@@ -176,6 +185,7 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 		log.Println("-to\tThe timeout for each web request [Default:5]")
 		log.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
 		log.Println("-proxy\tThe proxy to send the requests through: Example http://127.0.0.1:8080 [Default: no proxy]")
+		log.Println("-rate\tThe rate limit to apply to the requests in req/s [Default: no limit]")
 		log.Println("")
 		log.Println("General Options:")
 		log.Println("-t\tThe number of concurrent threads [Default:10]")
@@ -201,6 +211,7 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 		log.Println("-fl\tFilter http response by number of lines")
 		log.Println("-fr\tFilter http response by regular expression in response body")
 		log.Println("-ft\tFilter responses that take longer than or equal to the specified time in miliseconds")
+		log.Println("-ec\tThe http error codes we want to retry on [Default:'504,503']")
 		log.Println("")
 		log.Println("Capture Options:")
 		log.Println("-capture\tThe regular expression used to capture data from the response. Data is saved into cap.txt by default")
@@ -247,6 +258,7 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "http://127.0.0.1/", "")
 	flag.StringVar(&(progArgs.RequestOptions.Data), "d", "", "")
 	flag.StringVar(&(progArgs.RequestOptions.Proxy), "proxy", "", "")
+	flag.IntVar(&(progArgs.RequestOptions.Rate), "rate", 0, "")
 	flag.StringVar(&(progArgs.RequestOptions.ReqFile), "f", "", "")
 	flag.StringVar(&(progArgs.RequestOptions.Method), "method", "GET", "")
 	flag.IntVar(&(progArgs.RequestOptions.Timeout), "to", 15, "")
@@ -281,6 +293,7 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 	flag.Var(&(progArgs.FilterOptions.Fl), "fl", "")
 	flag.StringVar(&(progArgs.FilterOptions.Fr), "fr", "", "")
 	flag.IntVar(&(progArgs.FilterOptions.Ft), "ft", 0, "")
+	flag.Var(&(progArgs.FilterOptions.Ec), "ec", "")
 
 	// Capture Options
 	flag.StringVar(&(progArgs.CaptureOptions.Cap), "capture", "", "")
@@ -298,6 +311,10 @@ func parseArgs(args []string, log *utils.Logger) *config.Args {
 func loadDefaults(args *config.Args) {
 	if len(args.FilterOptions.Mc) <= 0 {
 		args.FilterOptions.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
+	}
+
+	if len(args.FilterOptions.Ec) <= 0 {
+		args.FilterOptions.Ec.Set("504,503")
 	}
 
 	if len(args.RecursionOptions.RecurseCode) <= 0 {
