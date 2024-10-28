@@ -32,7 +32,7 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 			success = success || status
 			index = index + 1
 			if !success {
-				time.Sleep(time.Duration((1000 / args.RequestOptions.Rate) * int(time.Millisecond)))
+				time.Sleep(time.Duration((1000 / args.RequestOptions.Rate) * float64(time.Millisecond)))
 			}
 		}
 		if !success {
@@ -50,7 +50,7 @@ func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *
 
 // procExtensions adds use specified file extensions onto fuzzing data and then sends the modified data
 // to the request channel which is picked up by the sendReq methods
-func procExtensions(currString []string, extensions []string, reqChan chan []string, rateLimit int) {
+func procExtensions(currString []string, extensions []string, reqChan chan []string, rateLimit float64) {
 	if len(extensions) <= 0 {
 		reqChan <- currString
 	}
@@ -61,7 +61,7 @@ func procExtensions(currString []string, extensions []string, reqChan chan []str
 			extCurrString = append(extCurrString, position+ext)
 		}
 		if rateLimit > 0 {
-			time.Sleep(time.Duration((1000 / rateLimit) * int(time.Millisecond)))
+			time.Sleep(time.Duration((1000 / rateLimit) * float64(time.Millisecond)))
 		}
 		reqChan <- extCurrString
 	}
@@ -258,7 +258,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "http://127.0.0.1/", "")
 	flag.StringVar(&(progArgs.RequestOptions.Data), "d", "", "")
 	flag.StringVar(&(progArgs.RequestOptions.Proxy), "proxy", "", "")
-	flag.IntVar(&(progArgs.RequestOptions.Rate), "rate", 0, "")
+	flag.Float64Var(&(progArgs.RequestOptions.Rate), "rate", 0, "")
 	flag.StringVar(&(progArgs.RequestOptions.ReqFile), "f", "", "")
 	flag.StringVar(&(progArgs.RequestOptions.Method), "method", "GET", "")
 	flag.IntVar(&(progArgs.RequestOptions.Timeout), "to", 15, "")

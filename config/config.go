@@ -86,7 +86,7 @@ func (m *multiSplitIntFlag) Set(value string) error {
 type RequestOptions struct {
 	Url           string
 	Proxy         string
-	Rate          int
+	Rate          float64
 	Method        string
 	ReqFile       string
 	Headers       multiStringFlag
