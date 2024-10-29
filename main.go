@@ -239,6 +239,9 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("\turlDecode(string): takes a single url encoded string and returns the decoded string")
 		log.Println("\t" + `concat(string, string, string, ...): takes any number of strings and returns all the strings joined together. Note that
 		concat is only needed when joinging the output of a function to another function, or to a string. It is not needed to join two strings`)
+		log.Println("\trandStr([int,[int]]): generates a random string of letters and numbers. Optionally specify an minimum and maximum length. Default is 10, 65")
+		log.Println("\trandInt([int,[int]]): generates a random integer. Optionally specify an minimum and maximum int. Default is 0, MAX_INT64")
+		log.Println("\trandBytes([int,[int]]): generates a random string of bytes. Optionally specify an minimum and maximum length. Default is 10, 1024")
 		log.Println("")
 		log.Println("Example Usage:")
 		log.Println("")
@@ -373,9 +376,7 @@ func main() {
 
 	var agent *request.ReqAgentHttp
 	if reqFileContent != "" { // initialize as http agent
-		if strings.HasSuffix(args.RequestOptions.Url, "/") {
-			args.RequestOptions.Url = args.RequestOptions.Url[:len(args.RequestOptions.Url)-1]
-		}
+		args.RequestOptions.Url = strings.TrimSuffix(args.RequestOptions.Url, "/")
 		agent = request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.RemoveHeaders)
 	} else {
 		agent = request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy, args.RequestOptions.Timeout)
