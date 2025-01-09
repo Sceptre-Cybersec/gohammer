@@ -5,7 +5,7 @@ import (
 	"os"
 	"regexp"
 
-	"gohammer/config"
+	"github.com/Sceptre-Cybersec/gohammer/config"
 )
 
 type Filter struct {

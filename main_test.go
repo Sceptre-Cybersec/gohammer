@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"gohammer/config"
-	"gohammer/processors/request"
-	"gohammer/processors/request/transforms"
-	"gohammer/processors/response"
-	"gohammer/utils"
+	"github.com/Sceptre-Cybersec/gohammer/config"
+	"github.com/Sceptre-Cybersec/gohammer/processors/request"
+	"github.com/Sceptre-Cybersec/gohammer/processors/request/transforms"
+	"github.com/Sceptre-Cybersec/gohammer/processors/response"
+	"github.com/Sceptre-Cybersec/gohammer/utils"
 )
 
 var httpChan chan string = make(chan string)

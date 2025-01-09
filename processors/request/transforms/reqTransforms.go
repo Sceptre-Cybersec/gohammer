@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"gohammer/config"
-	"gohammer/processors/response"
-	"gohammer/utils"
+	"github.com/Sceptre-Cybersec/gohammer/config"
+	"github.com/Sceptre-Cybersec/gohammer/processors/response"
+	"github.com/Sceptre-Cybersec/gohammer/utils"
 )
 
 type TransformContext struct {

@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"gohammer/config"
-	"gohammer/utils"
+	"github.com/Sceptre-Cybersec/gohammer/config"
+	"github.com/Sceptre-Cybersec/gohammer/utils"
 
-	"gohammer/processors/request/transforms"
-	"gohammer/processors/response"
+	"github.com/Sceptre-Cybersec/gohammer/processors/request/transforms"
+	"github.com/Sceptre-Cybersec/gohammer/processors/response"
 )
 
 type ReqTemplate struct {

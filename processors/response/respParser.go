@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gohammer/config"
-	"gohammer/utils"
+	"github.com/Sceptre-Cybersec/gohammer/config"
+	"github.com/Sceptre-Cybersec/gohammer/utils"
 )
 
 type Resp struct {

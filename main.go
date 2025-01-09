@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"gohammer/config"
-	"gohammer/processors/request"
-	"gohammer/processors/response"
-	"gohammer/utils"
+	"github.com/Sceptre-Cybersec/gohammer/config"
+	"github.com/Sceptre-Cybersec/gohammer/processors/request"
+	"github.com/Sceptre-Cybersec/gohammer/processors/response"
+	"github.com/Sceptre-Cybersec/gohammer/utils"
 )
 
 func sendReq(positionsChan chan []string, agents []*request.ReqAgentHttp, counter *utils.Counter, args *config.Args) {

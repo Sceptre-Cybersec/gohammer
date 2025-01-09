@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gohammer/utils"
+	"github.com/Sceptre-Cybersec/gohammer/utils"
 )
 
 func splitMultiInt(value string) ([]int, error) {
