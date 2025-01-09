@@ -13,7 +13,8 @@ import (
 )
 
 var FrontierQ [][]string = [][]string{{""}}
-var FrontierLock sync.Mutex
+var FrontierLock sync.Mutex // this lock it used to ensure the FrontierQ doesn't get corrupted
+var ReqLock sync.RWMutex    // this lock is used to pause the sending of requests
 
 var TotalJobs int
 

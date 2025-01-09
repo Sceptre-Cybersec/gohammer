@@ -17,6 +17,14 @@ func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout
 		fmt.Println("Error parsing url path from request file")
 		os.Exit(1)
 	}
+	if urlBase == "" {
+		getHostName := regexp.MustCompile(`(?:h|H)ost:\s(\S+)`)
+		hostGroups := getHostName.FindStringSubmatch(reqContent)
+		if len(hostGroups) <= 1 {
+			fmt.Println("Error parsing host from request file")
+			os.Exit(1)
+		}
+	}
 	path := urlBase + pathGroups[1]
 
 	getContent := regexp.MustCompile(`(?s)(?:\r\n\r\n|\n\n)(.*)`)

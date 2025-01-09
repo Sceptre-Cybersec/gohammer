@@ -3,46 +3,51 @@ package main
 import (
 	"bufio"
 	"flag"
-	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/wadeking98/gohammer/config"
-	"github.com/wadeking98/gohammer/processors/request"
-	"github.com/wadeking98/gohammer/utils"
+	"gohammer/config"
+	"gohammer/processors/request"
+	"gohammer/processors/response"
+	"gohammer/utils"
 )
 
-func sendReq(positionsChan chan []string, agent *request.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
+func sendReq(positionsChan chan []string, agents []*request.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
 	positions, ok := <-positionsChan
 	// while receiving input on channel
 	for ok {
+		previousResponses := []response.Resp{}
 
-		//retry request x times unless it succeeds
-		success := false
-		r := args.GeneralOptions.Retry
-		var status bool
-
-		//request retry section
-		index := 1
-		var err error
-		for ; r >= 0 && !success; r-- {
-			status, err = agent.Send(positions, counter, args)
-			success = success || status
-			index = index + 1
+		// send each request in order
+		for agent_idx, agent := range agents {
+			//retry request x times unless it succeeds
+			success := false
+			r := args.GeneralOptions.Retry
+			var status bool
+			//request retry section
+			index := 1
+			var err error
+			for ; r >= 0 && !success; r-- {
+				utils.ReqLock.RLock()
+				status, err = agent.Send(positions, counter, args, &previousResponses)
+				utils.ReqLock.RUnlock()
+				success = success || status
+				index = index + 1
+				if !success {
+					time.Sleep(time.Duration((1000 / args.RequestOptions.Rate) * float64(time.Millisecond)))
+				}
+			}
 			if !success {
-				time.Sleep(time.Duration((1000 / args.RequestOptions.Rate) * float64(time.Millisecond)))
+				counter.ErrorCounterInc()
+				if err != nil {
+					args.OutputOptions.Logger.Println(err.Error())
+				}
+			} else if agent_idx >= len(agents)-1 {
+				counter.CounterInc()
+				// TODO add error logging here
 			}
-		}
-		if !success {
-			counter.ErrorCounterInc()
-			if err != nil {
-				args.OutputOptions.Logger.Println(err.Error())
-			}
-		} else {
-			counter.CounterInc()
-			// TODO add error logging here
 		}
 		positions, ok = <-positionsChan
 	}
@@ -131,7 +136,7 @@ func procFiles(currString []string, reqChan chan []string, args *config.Args, in
 
 // recurseFuzz starts the main fuzzing logic, it starts sendReq threads listening on a request channel and
 // calls procFiles to start sending data over the channels
-func recurseFuzz(agent *request.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
+func recurseFuzz(agents []*request.ReqAgentHttp, counter *utils.Counter, args *config.Args) {
 	// rateLimitMs := 1000 / args.RequestOptions.Rate
 	for i := 0; len(utils.FrontierQ) > 0; i++ { // iteratively search web directories
 		if len(utils.FrontierQ[0]) > args.RecursionOptions.Depth && args.RecursionOptions.Depth > 0 {
@@ -150,7 +155,7 @@ func recurseFuzz(agent *request.ReqAgentHttp, counter *utils.Counter, args *conf
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					sendReq(reqChan, agent, counter, args)
+					sendReq(reqChan, agents, counter, args)
 				}()
 			}
 			if args.GeneralOptions.Dos {
@@ -179,7 +184,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("Request Options:")
 		log.Println("-u\tThe URL of the website to fuzz [Default:'http://127.0.0.1/']")
 		log.Println("-d\tThe data to provide in the request")
-		log.Println("-f\tThe request template file to use (Usually a request file saved from BurpSuite)")
+		log.Println("-f\tThe request template file to use. If multiple are supplied, requests are sent in sequence. (Usually a request file saved from BurpSuite)")
 		log.Println("-H\tList of headers, one per flag: -H 'Header1: value1' -H 'Header2: value2'")
 		log.Println("-rH\tList of headers to remove, one per flag: -rH 'Connection', -rH 'Accept-Encoding' [Default 'Connection' and 'Accept-Encoding']")
 		log.Println("-to\tThe timeout for each web request [Default:5]")
@@ -190,7 +195,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("General Options:")
 		log.Println("-t\tThe number of concurrent threads [Default:10]")
 		log.Println("-retry\tThe number of times to retry a failed request before giving up [Default:3]")
-		log.Println("-dos\tRun a denial of service attack (for stress testing) [Default:false]")
+		log.Println("-dos\tRun a denial of service attack (for stress testing). This will repeat any provided wordlist indefinitely. [Default:false]")
 		log.Println("")
 		log.Println("Recursion Options:")
 		log.Println("-rd\tThe recursion depth of the search. Set to 0 for unlimited recursion, 1 for no recursion [Default:1]")
@@ -211,7 +216,36 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("-fl\tFilter http response by number of lines")
 		log.Println("-fr\tFilter http response by regular expression in response body")
 		log.Println("-ft\tFilter responses that take longer than or equal to the specified time in miliseconds")
-		log.Println("-ec\tThe http error codes we want to retry on [Default:'504,503']")
+		log.Println("")
+		log.Println("Error Filter Options:")
+		log.Println("-emc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
+		log.Println("-ems\tMatch http response by size")
+		log.Println("-emw\tMatch http response by number of words")
+		log.Println("-eml\tMatch http response by number of lines")
+		log.Println("-emr\tMatch http response by regular expression in response body")
+		log.Println("-emt\tMatch responses that take longer than or equal to the specified time in miliseconds")
+		log.Println("-efc\tThe http response codes to filter")
+		log.Println("-efs\tFilter http response by size")
+		log.Println("-efw\tFilter http response by number of words")
+		log.Println("-efl\tFilter http response by number of lines")
+		log.Println("-efr\tFilter http response by regular expression in response body")
+		log.Println("-eft\tFilter responses that take longer than or equal to the specified time in miliseconds")
+		log.Println("")
+		log.Println("Trigger Filter Options:")
+		log.Println("-tmc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
+		log.Println("-tms\tMatch http response by size")
+		log.Println("-tmw\tMatch http response by number of words")
+		log.Println("-tml\tMatch http response by number of lines")
+		log.Println("-tmr\tMatch http response by regular expression in response body")
+		log.Println("-tmt\tMatch responses that take longer than or equal to the specified time in miliseconds")
+		log.Println("-tfc\tThe http response codes to filter")
+		log.Println("-tfs\tFilter http response by size")
+		log.Println("-tfw\tFilter http response by number of words")
+		log.Println("-tfl\tFilter http response by number of lines")
+		log.Println("-tfr\tFilter http response by regular expression in response body")
+		log.Println("-tft\tFilter responses that take longer than or equal to the specified time in miliseconds")
+		log.Println("-ontrigger\tExecute an OS command once triggered. The HTTP response will be in the RES env variable")
+		log.Println("-trigger-requeue\tEnsures that a request that activated a trigger is re-sent up to the number of times specified in -retry")
 		log.Println("")
 		log.Println("Capture Options:")
 		log.Println("-capture\tThe regular expression used to capture data from the response. Data is saved into cap.txt by default")
@@ -242,6 +276,8 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("\trandStr([int,[int]]): generates a random string of letters and numbers. Optionally specify an minimum and maximum length. Default is 10, 65")
 		log.Println("\trandInt([int,[int]]): generates a random integer. Optionally specify an minimum and maximum int. Default is 0, MAX_INT64")
 		log.Println("\trandBytes([int,[int]]): generates a random string of bytes. Optionally specify an minimum and maximum length. Default is 10, 1024")
+		log.Println("\tregex(string, string, [int]): runs a regular expression and returns the specified capture group. Note that special characters still need to be escaped.")
+		log.Println("\tprevResponse(int): returns the content of a previous response when using multiple request files. An index of 0 selects the response from the first request file.")
 		log.Println("")
 		log.Println("Example Usage:")
 		log.Println("")
@@ -256,13 +292,15 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("")
 		log.Println("Transform Usage (HTTP Basic Auth):")
 		log.Println("gohammer -u https://some.site.com/ -H 'Authorization: @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+		log.Println("Use CSRF token:")
+		log.Println("gohammer -u https://some.site.com/ -f get-csrf-req.txt -f do-request.txt -transform 'regex(prevResponse(0),x-csrf-token: \\(.*\\),1)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 	}
 	// Request Options
 	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "http://127.0.0.1/", "")
 	flag.StringVar(&(progArgs.RequestOptions.Data), "d", "", "")
 	flag.StringVar(&(progArgs.RequestOptions.Proxy), "proxy", "", "")
 	flag.Float64Var(&(progArgs.RequestOptions.Rate), "rate", 0, "")
-	flag.StringVar(&(progArgs.RequestOptions.ReqFile), "f", "", "")
+	flag.Var(&(progArgs.RequestOptions.ReqFile), "f", "")
 	flag.StringVar(&(progArgs.RequestOptions.Method), "method", "GET", "")
 	flag.IntVar(&(progArgs.RequestOptions.Timeout), "to", 15, "")
 	flag.Var(&(progArgs.RequestOptions.Headers), "H", "")
@@ -276,7 +314,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 	// Recursion Options
 	flag.IntVar(&(progArgs.RecursionOptions.Depth), "rd", 1, "")
 	flag.IntVar(&(progArgs.RecursionOptions.RecursePosition), "rp", 0, "")
-	flag.StringVar(&(progArgs.RecursionOptions.RecurseDelimeter), "rdl", "/", "")
+	flag.StringVar(&(progArgs.RecursionOptions.RecurseDelimiter), "rdl", "/", "")
 	flag.Var(&(progArgs.RecursionOptions.RecurseCode), "rc", "")
 
 	// Wordlist Options
@@ -296,7 +334,36 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 	flag.Var(&(progArgs.FilterOptions.Fl), "fl", "")
 	flag.StringVar(&(progArgs.FilterOptions.Fr), "fr", "", "")
 	flag.IntVar(&(progArgs.FilterOptions.Ft), "ft", 0, "")
-	flag.Var(&(progArgs.FilterOptions.Ec), "ec", "")
+
+	// Error Filter Options
+	flag.Var(&(progArgs.ErrorFilterOptions.Mc), "emc", "")
+	flag.Var(&(progArgs.ErrorFilterOptions.Ms), "ems", "")
+	flag.Var(&(progArgs.ErrorFilterOptions.Mw), "emw", "")
+	flag.Var(&(progArgs.ErrorFilterOptions.Ml), "eml", "")
+	flag.StringVar(&(progArgs.ErrorFilterOptions.Mr), "emr", "", "")
+	flag.IntVar(&(progArgs.ErrorFilterOptions.Mt), "emt", 0, "")
+	flag.Var(&(progArgs.ErrorFilterOptions.Fc), "efc", "")
+	flag.Var(&(progArgs.ErrorFilterOptions.Fs), "efs", "")
+	flag.Var(&(progArgs.ErrorFilterOptions.Fw), "efw", "")
+	flag.Var(&(progArgs.ErrorFilterOptions.Fl), "efl", "")
+	flag.StringVar(&(progArgs.ErrorFilterOptions.Fr), "efr", "", "")
+	flag.IntVar(&(progArgs.ErrorFilterOptions.Ft), "eft", 0, "")
+
+	// Trigger Filter Options
+	flag.Var(&(progArgs.TriggerFilterOptions.Filters.Mc), "tmc", "")
+	flag.Var(&(progArgs.TriggerFilterOptions.Filters.Ms), "tms", "")
+	flag.Var(&(progArgs.TriggerFilterOptions.Filters.Mw), "tmw", "")
+	flag.Var(&(progArgs.TriggerFilterOptions.Filters.Ml), "tml", "")
+	flag.StringVar(&(progArgs.TriggerFilterOptions.Filters.Mr), "tmr", "", "")
+	flag.IntVar(&(progArgs.TriggerFilterOptions.Filters.Mt), "tmt", 0, "")
+	flag.Var(&(progArgs.TriggerFilterOptions.Filters.Fc), "tfc", "")
+	flag.Var(&(progArgs.TriggerFilterOptions.Filters.Fs), "tfs", "")
+	flag.Var(&(progArgs.TriggerFilterOptions.Filters.Fw), "tfw", "")
+	flag.Var(&(progArgs.TriggerFilterOptions.Filters.Fl), "tfl", "")
+	flag.StringVar(&(progArgs.TriggerFilterOptions.Filters.Fr), "tfr", "", "")
+	flag.IntVar(&(progArgs.TriggerFilterOptions.Filters.Ft), "tft", 0, "")
+	flag.StringVar(&(progArgs.TriggerFilterOptions.Filters.Fr), "ontrigger", "", "")
+	flag.BoolVar(&(progArgs.TriggerFilterOptions.Requeue), "trigger-requeue", false, "")
 
 	// Capture Options
 	flag.StringVar(&(progArgs.CaptureOptions.Cap), "capture", "", "")
@@ -316,8 +383,8 @@ func loadDefaults(args *config.Args) {
 		args.FilterOptions.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
 	}
 
-	if len(args.FilterOptions.Ec) <= 0 {
-		args.FilterOptions.Ec.Set("504,503")
+	if len(args.ErrorFilterOptions.Mc) <= 0 {
+		args.ErrorFilterOptions.Mc.Set("504,503")
 	}
 
 	if len(args.RecursionOptions.RecurseCode) <= 0 {
@@ -348,21 +415,21 @@ func main() {
 	log := utils.NewLogger(utils.INFO, os.Stdout)
 	args.OutputOptions.Logger = log
 
-	if len(args.WordlistOptions.Files) <= 0 && !args.GeneralOptions.Dos {
-		log.Println("Please specify a wordlist unless you are using DOS mode")
-		os.Exit(1)
+	if len(args.WordlistOptions.Files) <= 0 {
+		args.GeneralOptions.Dos = true
 	}
 
 	//load request file contents
-	reqFileContent := ""
-	if args.RequestOptions.ReqFile != "" {
-		fileBytes, err := ioutil.ReadFile(args.RequestOptions.ReqFile)
+	var reqFileContents []string
+	for _, reqFile := range args.RequestOptions.ReqFile {
+		fileBytes, err := os.ReadFile(reqFile)
 		if err != nil {
 			log.Printf("Error: couldn't open %s\n", args.RequestOptions.ReqFile)
 			os.Exit(1)
 		}
-		reqFileContent = utils.RemoveTrailingNewline(string(fileBytes))
+		reqFileContents = append(reqFileContents, utils.RemoveTrailingNewline(string(fileBytes)))
 	}
+
 	args.RequestOptions.Timeout = args.RequestOptions.Timeout * int(time.Second)
 	// apply filter codes
 	args.FilterOptions.Mc = utils.SetDif(args.FilterOptions.Mc, args.FilterOptions.Fc)
@@ -374,17 +441,22 @@ func main() {
 		utils.TotalJobs = utils.GetNumJobs(args.WordlistOptions.Files, args.WordlistOptions.NoBrute, args.WordlistOptions.Extensions, log)
 	}
 
-	var agent *request.ReqAgentHttp
-	if reqFileContent != "" { // initialize as http agent
+	var agents []*request.ReqAgentHttp
+	if len(reqFileContents) > 0 { // initialize as http agent
 		args.RequestOptions.Url = strings.TrimSuffix(args.RequestOptions.Url, "/")
-		agent = request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.RemoveHeaders)
+		for _, reqFileContent := range reqFileContents {
+			agent := request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.RemoveHeaders)
+			agents = append(agents, agent)
+		}
+
 	} else {
-		agent = request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy, args.RequestOptions.Timeout)
+		agent := request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy, args.RequestOptions.Timeout)
+		agents = append(agents, agent)
 	}
 
 	counter := utils.NewCounter()
 	go utils.PrintProgressLoop(counter, args.GeneralOptions.Dos, log)
-	recurseFuzz(agent, counter, args)
+	recurseFuzz(agents, counter, args)
 	utils.PrintProgress(counter, args.GeneralOptions.Dos, log)
 	log.Println("")
 }

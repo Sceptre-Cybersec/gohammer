@@ -3,6 +3,7 @@ package request
 import (
 	"bytes"
 	"crypto/tls"
+	"regexp"
 	"strconv"
 
 	// "crypto/tls"
@@ -14,10 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wadeking98/gohammer/config"
-	"github.com/wadeking98/gohammer/processors/request/transforms"
-	"github.com/wadeking98/gohammer/processors/response"
-	"github.com/wadeking98/gohammer/utils"
+	"gohammer/config"
+	"gohammer/utils"
+
+	"gohammer/processors/request/transforms"
+	"gohammer/processors/response"
 )
 
 type ReqTemplate struct {
@@ -95,10 +97,25 @@ func (req *ReqAgentHttp) GetBody() string {
 	return req.template.body
 }
 
-func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *config.Args) (bool, error) {
+func (req *ReqAgentHttp) HasTransform() bool {
+	re := regexp.MustCompile(`@t\d+@`)
+	content := []string{}
+	content = append(content, req.template.url, req.template.body, req.template.method)
+	content = append(content, req.template.headers...)
+	found := false
+	for _, stringToTest := range content {
+		found = re.MatchString(stringToTest)
+		if found {
+			break
+		}
+	}
+	return found
+}
+
+func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *config.Args, previousResponses *[]response.Resp) (bool, error) {
 
 	// apply positions from wordlist to request template
-	procReq := procReqTemplate(req, positions, args)
+	procReq := procReqTemplate(req, positions, args, previousResponses)
 	reqTemplate, err := http.NewRequest(procReq.method, procReq.url, bytes.NewBuffer([]byte(procReq.body)))
 
 	if err != nil {
@@ -132,26 +149,21 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 	}
 	r := response.NewRespFromHttp(resp, elapsed, err)
 
-	// not an error created by 301 without Location header
+	// an error created by 301 without Location header
 	if r.Code == 0 && err != nil {
 		return false, err
 	}
 
-	// check if in user supplied error codes
-	for _, code := range args.FilterOptions.Ec {
-		if r.Code == code {
-			return false, err
-		}
-	}
+	*previousResponses = append(*previousResponses, *r)
 
-	r.ProcessResp(positions, counter, args)
+	ret, err := r.ProcessResp(positions, counter, args)
 
-	return true, nil
+	return ret, err
 }
 
 // ProcReqTemplate applies words from a set of wordlists to a request template
 // Returns the parsed request template
-func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args) *ReqTemplate {
+func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args, previousResponses *[]response.Resp) *ReqTemplate {
 	url := utils.ReplacePosition(reqAgent.GetUrl(), positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger)
 	method := utils.ReplacePosition(reqAgent.GetMethod(), positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger)
 	var headers []string
@@ -159,13 +171,12 @@ func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Ar
 		headers = append(headers, utils.ReplacePosition(header, positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger))
 	}
 	body := utils.ReplacePosition(reqAgent.GetBody(), positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger)
-
-	if len(args.TransformOptions.Transforms) > 0 {
+	if len(args.TransformOptions.Transforms) > 0 && reqAgent.HasTransform() {
 		// apply transforms too
 		var transformPostions []string
 		// process transforms into postions array
 		for _, transTemplate := range args.TransformOptions.Transforms {
-			transformPostions = append(transformPostions, transforms.ApplyTransforms(transTemplate, reqAgent.transformList, positions, args))
+			transformPostions = append(transformPostions, transforms.ApplyTransforms(transTemplate, reqAgent.transformList, positions, args, previousResponses))
 		}
 		url = transforms.ReplaceTranformPosition(url, transformPostions, args.OutputOptions.Logger)
 		method = transforms.ReplaceTranformPosition(method, transformPostions, args.OutputOptions.Logger)

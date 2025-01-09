@@ -6,13 +6,19 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wadeking98/gohammer/config"
-	"github.com/wadeking98/gohammer/utils"
+	"gohammer/config"
+	"gohammer/processors/response"
+	"gohammer/utils"
 )
+
+type TransformContext struct {
+	PreviousResponses []response.Resp
+	Args              []string
+}
 
 // ApplyTransforms takes a list of transform templates and applies the functions included in the transforms
 // Transform templates take the following form and accept fuzzing parameters and functions, Function(arg1), Function1(Function2(@0@:@1@)), @0@(test)
-func ApplyTransforms(transfromTemplates string, transforms TransformList, positions []string, conf *config.Args) string {
+func ApplyTransforms(transfromTemplates string, transforms TransformList, positions []string, conf *config.Args, previousResponses *[]response.Resp) string {
 	funcName, args := getFuncAndArgs(transfromTemplates)
 	if funcName == "" {
 		outp := normalize(transfromTemplates)
@@ -20,12 +26,16 @@ func ApplyTransforms(transfromTemplates string, transforms TransformList, positi
 	} else if funcName != "" && len(args) > 0 {
 		var argList []string
 		for _, arg := range args {
-			argList = append(argList, ApplyTransforms(arg, transforms, positions, conf))
+			argList = append(argList, ApplyTransforms(arg, transforms, positions, conf, previousResponses))
+		}
+		context := TransformContext{
+			Args:              argList,
+			PreviousResponses: *previousResponses,
 		}
 		parsedFuncName := utils.ReplacePosition(funcName, positions, conf.RecursionOptions.RecursePosition, conf.OutputOptions.Logger)
 		transFunc := transforms[parsedFuncName]
 		if transFunc != nil {
-			return transFunc(argList...)
+			return transFunc(context)
 		} else {
 			conf.OutputOptions.Logger.Printf("Error: Invalid translation function %s\n", parsedFuncName)
 		}

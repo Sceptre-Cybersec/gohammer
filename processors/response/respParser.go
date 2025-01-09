@@ -1,25 +1,30 @@
 package response
 
 import (
+	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
-	"github.com/wadeking98/gohammer/config"
-	"github.com/wadeking98/gohammer/utils"
+	"gohammer/config"
+	"gohammer/utils"
 )
 
 type Resp struct {
-	Code  int
-	Time  int
-	Body  string
-	Err   error
-	Size  int
-	Words int
-	Lines int
+	Code    int
+	Time    int
+	Body    string
+	Headers []string
+	Err     error
+	Size    int
+	Words   int
+	Lines   int
 }
 
 // NewRespFromTcp builds a new response object from a tcp response message
@@ -55,13 +60,23 @@ func NewRespFromHttp(resp *http.Response, respTime int, err error) *Resp {
 	}
 
 	r := Resp{
-		Code: statusCode,
-		Time: respTime,
-		Body: httpRespToRespBody(resp),
-		Err:  err,
+		Code:    statusCode,
+		Time:    respTime,
+		Body:    httpRespToRespBody(resp),
+		Headers: httpRespToHeaders(resp),
+		Err:     err,
 	}
 	r.Size, r.Words, r.Lines = sizeRespBody(r.Body)
 	return &r
+}
+
+func (r *Resp) ToString() string {
+	res := strconv.FormatInt(int64(r.Code), 10)
+	for _, header := range r.Headers {
+		res = res + "\n" + header
+	}
+	res = res + "\n\n" + r.Body
+	return res
 }
 
 // IsRecurse determines if a value response code corresponds to a web folder
@@ -76,15 +91,49 @@ func (r *Resp) IsRecurse(codes []int) bool {
 	return ret
 }
 
-func (resp *Resp) ProcessResp(positions []string, counter *utils.Counter, args *config.Args) {
+func (resp *Resp) ProcessResp(positions []string, counter *utils.Counter, args *config.Args) (bool, error) {
+	// process errors
+	errorFilter := NewFilter(resp)
+	errorFound := errorFilter.ApplyFilters(&args.ErrorFilterOptions)
+	if errorFound {
+		return false, error(nil)
+	}
+	// process triggers
+	triggerFilter := NewFilter(resp)
+	triggerPassed := triggerFilter.ApplyFilters(&args.TriggerFilterOptions.Filters)
+	if triggerPassed {
+		if args.TriggerFilterOptions.OnTrigger != "" {
+			go func() { // The parent function is currently holding the read lock
+				// we need to run this in a thread so we don't hold the read lock and ask for the write lock at the same time
+				utils.ReqLock.Lock()
+				os.Setenv("RES", resp.Body)
+				cmd := exec.Command("sh", "-c", args.TriggerFilterOptions.OnTrigger)
+				var out bytes.Buffer
+				cmd.Stdout = &out
+				if runtime.GOOS == "windows" {
+					cmd = exec.Command("cmd", "/c", args.TriggerFilterOptions.OnTrigger)
+				}
+				cmd.Run()
+				utils.ReqLock.Unlock()
+				args.OutputOptions.Logger.Test("Executed command output: " + out.String())
+			}()
+		}
+		// retry the request as if it were an error
+		if args.TriggerFilterOptions.Requeue {
+			return false, error(nil)
+		}
+	}
 
-	filter := NewFilter(resp, args)
-	passed := filter.ApplyFilters(args)
-	if passed && len(positions) > 0 {
-		displayPos := make([]string, len(positions))
-		copy(displayPos, positions)
-		displayPos[args.RecursionOptions.RecursePosition] = strings.Join(utils.FrontierQ[0], "") + positions[args.RecursionOptions.RecursePosition]
-		args.OutputOptions.Logger.Println(respLineFormatter(resp.Code, resp.Size, resp.Words, resp.Lines, resp.Time, displayPos, 12))
+	filter := NewFilter(resp)
+	passed := filter.ApplyFilters(&args.FilterOptions)
+	if passed {
+		args.OutputOptions.Logger.Test("Passed all filters: " + strconv.FormatBool(passed))
+		if len(positions) > 0 {
+			displayPos := make([]string, len(positions))
+			copy(displayPos, positions)
+			displayPos[args.RecursionOptions.RecursePosition] = strings.Join(utils.FrontierQ[0], "") + positions[args.RecursionOptions.RecursePosition]
+			args.OutputOptions.Logger.Println(respLineFormatter(resp.Code, resp.Size, resp.Words, resp.Lines, resp.Time, displayPos, 12))
+		}
 		utils.PrintProgress(counter, args.GeneralOptions.Dos, args.OutputOptions.Logger)
 	}
 
@@ -96,9 +145,11 @@ func (resp *Resp) ProcessResp(positions []string, counter *utils.Counter, args *
 	if resp.IsRecurse(args.RecursionOptions.RecurseCode) {
 		utils.FrontierLock.Lock()
 		// add current position to base string of Frontier[0] and add it to the frontier
-		utils.FrontierQ = append(utils.FrontierQ, append(utils.FrontierQ[0], positions[args.RecursionOptions.RecursePosition]+args.RecursionOptions.RecurseDelimeter))
+		utils.FrontierQ = append(utils.FrontierQ, append(utils.FrontierQ[0], positions[args.RecursionOptions.RecursePosition]+args.RecursionOptions.RecurseDelimiter))
 		utils.FrontierLock.Unlock()
 	}
+
+	return true, nil
 }
 
 // formats each column into equal width
@@ -127,9 +178,19 @@ func sizeRespBody(resp string) (int, int, int) {
 func httpRespToRespBody(resp *http.Response) string {
 	var respBodyText []byte
 	if resp != nil {
-		respBodyText, _ = ioutil.ReadAll(resp.Body)
+		respBodyText, _ = io.ReadAll(resp.Body)
 	}
 	return string(respBodyText)
+}
+
+func httpRespToHeaders(resp *http.Response) []string {
+	headers := []string{}
+	for k, v := range resp.Header {
+		for _, val := range v {
+			headers = append(headers, fmt.Sprintf("%s: %s", k, val))
+		}
+	}
+	return headers
 }
 
 // tcpRespToRespBody grabs the response body from the raw tcp response

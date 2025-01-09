@@ -5,7 +5,7 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/wadeking98/gohammer/config"
+	"gohammer/config"
 )
 
 type Capture struct {
@@ -33,20 +33,19 @@ func (c *Capture) ApplyCapture() {
 	}
 	body := c.response.Body
 	matches := re.FindAllStringSubmatch(body, -1)
-	if matches != nil {
-		for _, match := range matches {
-			if len(match) > c.capGroup {
-				matchString := match[c.capGroup] + "\n"
-				f, err := os.OpenFile("cap.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-				if err != nil {
-					fmt.Println(err.Error())
-					fmt.Println("Error creating capture file")
-					os.Exit(1)
-				}
-				defer f.Close()
 
-				f.WriteString(matchString)
+	for _, match := range matches {
+		if len(match) > c.capGroup {
+			matchString := match[c.capGroup] + "\n"
+			f, err := os.OpenFile("cap.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				fmt.Println(err.Error())
+				fmt.Println("Error creating capture file")
+				os.Exit(1)
 			}
+			defer f.Close()
+
+			f.WriteString(matchString)
 		}
 	}
 }

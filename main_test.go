@@ -10,10 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wadeking98/gohammer/config"
-	"github.com/wadeking98/gohammer/processors/request"
-	"github.com/wadeking98/gohammer/processors/request/transforms"
-	"github.com/wadeking98/gohammer/utils"
+	"gohammer/config"
+	"gohammer/processors/request"
+	"gohammer/processors/request/transforms"
+	"gohammer/processors/response"
+	"gohammer/utils"
 )
 
 var httpChan chan string = make(chan string)
@@ -31,6 +32,12 @@ func reqHandle(w http.ResponseWriter, r *http.Request) {
 		httpChan <- r.Host
 		httpChan <- r.Header["Content-Type"][0]
 		fmt.Fprint(w, "OK")
+	} else if strings.HasPrefix(r.URL.String(), "/trigger") {
+		w.WriteHeader(403)
+	} else if strings.HasPrefix(r.URL.String(), "/csrf") {
+		urlChan <- r.URL.String()
+		w.Header().Set("foo", "bar")
+		fmt.Fprint(w, "csrf-token: blahcsrfblah123")
 	} else {
 		body, err := ioutil.ReadAll(r.Body)
 		if err == nil && strings.HasPrefix(r.URL.String(), "/data") {
@@ -56,18 +63,19 @@ func TestSetup(t *testing.T) {
 func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
 	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/headers/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
 	args.FilterOptions.Mc = []int{200}
 	args.RecursionOptions.RecursePosition = 0
-	args.RecursionOptions.RecurseDelimeter = "/"
+	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
 	args.WordlistOptions.NoBrute = true
 	args.WordlistOptions.Extensions = []string{""}
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
-	go sendReq(reqChan, agent, counter, &args)
+	go sendReq(reqChan, agents, counter, &args)
 	reqChan <- []string{"a", "b"}
 	close(reqChan)
 	urlResp := <-urlChan
@@ -88,20 +96,21 @@ func TestSendReq(t *testing.T) {
 func TestBrute(t *testing.T) {
 	reqChan := make(chan []string)
 	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
 	args.FilterOptions.Mc = []int{200}
 	args.RecursionOptions.RecursePosition = 0
-	args.RecursionOptions.RecurseDelimeter = "/"
+	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
 	args.WordlistOptions.NoBrute = true
 	args.WordlistOptions.Extensions = []string{""}
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
-	go sendReq(reqChan, agent, counter, &args)
+	go sendReq(reqChan, agents, counter, &args)
 
-	go sendReq(reqChan, agent, counter, &args)
+	go sendReq(reqChan, agents, counter, &args)
 	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	resp := []string{<-urlChan, <-urlChan}
@@ -122,16 +131,17 @@ func TestBrute(t *testing.T) {
 func TestExtensions(t *testing.T) {
 	reqChan := make(chan []string)
 	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@_@1@", "GET", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	for i := 0; i < 4; i++ {
 		var args config.Args
 		args.RequestOptions.Timeout = 10 * int(time.Second)
 		args.FilterOptions.Mc = []int{200}
 		args.RecursionOptions.RecursePosition = 0
-		args.RecursionOptions.RecurseDelimeter = ""
+		args.RecursionOptions.RecurseDelimiter = ""
 		args.GeneralOptions.Retry = 0
 		args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
-		go sendReq(reqChan, agent, counter, &args)
+		go sendReq(reqChan, agents, counter, &args)
 	}
 
 	var args config.Args
@@ -161,17 +171,18 @@ func TestExtensions(t *testing.T) {
 func TestPostData(t *testing.T) {
 	reqChan := make(chan []string)
 	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/data", "POST", []string{}, "test=hello@0@", "", 5)
+	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
 	args.FilterOptions.Mc = []int{200}
 	args.RecursionOptions.RecursePosition = 0
-	args.RecursionOptions.RecurseDelimeter = "/"
+	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.Extensions = []string{""}
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
-	go sendReq(reqChan, agent, counter, &args)
+	go sendReq(reqChan, agents, counter, &args)
 	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	resp := <-bodyChan
@@ -184,12 +195,13 @@ func TestPostData(t *testing.T) {
 
 func TestRecursion(t *testing.T) {
 	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/recurse/@0@", "GET", []string{}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
 	args.FilterOptions.Mc = []int{200, 301}
 	args.RecursionOptions.RecursePosition = 0
-	args.RecursionOptions.RecurseDelimeter = "/"
+	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.NoBrute = false
@@ -199,7 +211,7 @@ func TestRecursion(t *testing.T) {
 	args.GeneralOptions.Retry = 0
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	args.RecursionOptions.RecurseCode = []int{301}
-	go recurseFuzz(agent, counter, &args)
+	go recurseFuzz(agents, counter, &args)
 	url1 := <-urlChan
 	url2 := <-urlChan
 	url3 := <-urlChan
@@ -244,19 +256,19 @@ func TestFilePost(t *testing.T) {
 	reqFileContent := utils.RemoveTrailingNewline(string(fileBytes))
 
 	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5, []string{})
-
+	agents := []*request.ReqAgentHttp{agent}
 	reqChan := make(chan []string)
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
 	args.FilterOptions.Mc = []int{200}
 	args.RecursionOptions.RecursePosition = 0
-	args.RecursionOptions.RecurseDelimeter = "/"
+	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.Extensions = []string{""}
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
-	go sendReq(reqChan, agent, counter, &args)
+	go sendReq(reqChan, agents, counter, &args)
 	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	resp := <-bodyChan
@@ -269,7 +281,8 @@ func TestTransforms(t *testing.T) {
 	transformList := transforms.NewTransformList()
 	var args config.Args
 	args.RecursionOptions.RecursePosition = 0
-	outp := transforms.ApplyTransforms("concat(b64Decode(b64Encode(@0@\\,test1)),test\\))", transformList, []string{"test)"}, &args)
+	previousResponses := []response.Resp{}
+	outp := transforms.ApplyTransforms("concat(b64Decode(b64Encode(@0@\\,test1)),test\\))", transformList, []string{"test)"}, &args, &previousResponses)
 	if outp != "test),test1test)" {
 		t.Fatal("invalid transform output")
 	}
@@ -277,19 +290,20 @@ func TestTransforms(t *testing.T) {
 
 func TestTransformRequests(t *testing.T) {
 	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@t0@", "GET", []string{}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
 	args.FilterOptions.Mc = []int{200}
 	args.RecursionOptions.RecursePosition = 0
-	args.RecursionOptions.RecurseDelimeter = "/"
+	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.Extensions = []string{""}
 	args.TransformOptions.Transforms = []string{"urlEncode(concat(b64Encode(@0@:test!),\\,,b64Encode(@0@:hello)))"}
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	reqChan := make(chan []string)
-	go sendReq(reqChan, agent, counter, &args)
+	go sendReq(reqChan, agents, counter, &args)
 	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	resp := <-urlChan
@@ -301,23 +315,104 @@ func TestTransformRequests(t *testing.T) {
 func TestMCAll(t *testing.T) {
 	buf := new(bytes.Buffer)
 	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/allCodes/@0@", "GET", []string{}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
 	args.RequestOptions.Timeout = 10 * int(time.Second)
 	args.FilterOptions.Mc = []int{-1}
 	args.RecursionOptions.RecursePosition = 0
-	args.RecursionOptions.RecurseDelimeter = "/"
+	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.Extensions = []string{""}
 	args.OutputOptions.Logger = utils.NewLogger(utils.TESTING, buf)
 	reqChan := make(chan []string)
-	go sendReq(reqChan, agent, counter, &args)
+	go sendReq(reqChan, agents, counter, &args)
 	procFiles(nil, reqChan, &args, 0)
 	close(reqChan)
 	time.Sleep(time.Duration(0.25 * float64(time.Second)))
 	out, _ := buf.ReadString(byte(0))
 	if !strings.Contains(out, "Passed all filters: true") {
 		t.Fatal("Match all codes failed")
+	}
+}
+
+func TestMultiAgentHandling(t *testing.T) {
+	buf := new(bytes.Buffer)
+	agent1 := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@", "GET", []string{}, "", "", 5)
+	agent2 := request.NewReqAgentHttp("http://127.0.0.1:8888/foo/@0@", "GET", []string{}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent1, agent2}
+	counter := utils.NewCounter()
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{-1}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimiter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
+	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.TESTING, buf)
+	reqChan := make(chan []string)
+	go sendReq(reqChan, agents, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
+	close(reqChan)
+	resp1 := <-urlChan
+	resp2 := <-urlChan
+	if resp1 != "/c" || resp2 != "/foo/c" {
+		t.Fatal("Multi agent request arrived out of order")
+	}
+}
+
+func TestMultiAgentRegexTransformHandling(t *testing.T) {
+	buf := new(bytes.Buffer)
+	agent1 := request.NewReqAgentHttp("http://127.0.0.1:8888/csrf/@0@", "GET", []string{}, "", "", 5)
+	agent2 := request.NewReqAgentHttp("http://127.0.0.1:8888/foo/@0@/@t0@", "GET", []string{}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent1, agent2}
+	counter := utils.NewCounter()
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{-1}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimiter = "/"
+	args.GeneralOptions.Retry = 0
+	args.TransformOptions.Transforms = []string{"regex(prevResponse(0),csrf-token: \\(.*\\),1)"}
+	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
+	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.TESTING, buf)
+	reqChan := make(chan []string)
+	go sendReq(reqChan, agents, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
+	close(reqChan)
+	resp1 := <-urlChan
+	resp2 := <-urlChan
+	if resp1 != "/csrf/c" || resp2 != "/foo/c/blahcsrfblah123" {
+		t.Fatal("Multi agent transform failed")
+	}
+}
+
+func TestOnError(t *testing.T) {
+	buf := new(bytes.Buffer)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/trigger/@0@", "GET", []string{}, "", "", 5)
+	agents := []*request.ReqAgentHttp{agent}
+	counter := utils.NewCounter()
+	var args config.Args
+	args.TriggerFilterOptions.Filters.Mc = []int{403}
+	args.TriggerFilterOptions.OnTrigger = "echo 'hello world!'"
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{-1}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimiter = "/"
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
+	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.TESTING, buf)
+	reqChan := make(chan []string)
+	go sendReq(reqChan, agents, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
+	close(reqChan)
+	time.Sleep(time.Duration(0.25 * float64(time.Second)))
+	out, _ := buf.ReadString(byte(0))
+	if !strings.Contains(out, "Executed command output: hello world!") {
+		t.Fatal("OnError command never executed")
 	}
 }

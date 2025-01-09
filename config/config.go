@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wadeking98/gohammer/utils"
+	"gohammer/utils"
 )
 
 func splitMultiInt(value string) ([]int, error) {
@@ -88,7 +88,7 @@ type RequestOptions struct {
 	Proxy         string
 	Rate          float64
 	Method        string
-	ReqFile       string
+	ReqFile       multiStringFlag
 	Headers       multiStringFlag
 	RemoveHeaders multiStringFlag
 	Timeout       int
@@ -104,7 +104,7 @@ type GeneralOptions struct {
 type RecursionOptions struct {
 	Depth            int
 	RecursePosition  int
-	RecurseDelimeter string
+	RecurseDelimiter string
 	RecurseCode      multiSplitIntFlag
 }
 
@@ -127,7 +127,12 @@ type FilterOptions struct {
 	Fl multiSplitIntFlag
 	Ft int
 	Fr string
-	Ec multiSplitIntFlag
+}
+
+type TriggerFilterOptions struct {
+	Filters   FilterOptions
+	OnTrigger string
+	Requeue   bool
 }
 
 type CaptureOptions struct {
@@ -145,12 +150,14 @@ type OutputOptions struct {
 }
 
 type Args struct {
-	RequestOptions   RequestOptions
-	GeneralOptions   GeneralOptions
-	RecursionOptions RecursionOptions
-	WordlistOptions  WordlistOptions
-	FilterOptions    FilterOptions
-	CaptureOptions   CaptureOptions
-	TransformOptions TransformOptions
-	OutputOptions    OutputOptions
+	RequestOptions       RequestOptions
+	GeneralOptions       GeneralOptions
+	RecursionOptions     RecursionOptions
+	WordlistOptions      WordlistOptions
+	FilterOptions        FilterOptions
+	ErrorFilterOptions   FilterOptions
+	TriggerFilterOptions TriggerFilterOptions
+	CaptureOptions       CaptureOptions
+	TransformOptions     TransformOptions
+	OutputOptions        OutputOptions
 }
