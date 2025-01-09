@@ -83,6 +83,17 @@ func getFuncAndArgs(input string) (string, []string) {
 	return funcName, args
 }
 
+func parseStringLiteral(input string) string {
+	for strings.HasPrefix(input, " ") || strings.HasSuffix(input, " ") {
+		input = strings.TrimPrefix(input, " ")
+		input = strings.TrimSuffix(input, " ")
+	}
+	if strings.HasPrefix(input, "`") && strings.HasSuffix(input, "`") {
+		input = input[1 : len(input)-1]
+	}
+	return input
+}
+
 func splitArgs(input string) []string {
 
 	bracketStack := 0
@@ -91,23 +102,27 @@ func splitArgs(input string) []string {
 	var argList []string
 	lastSplitPos := 0
 
+	inStringLiteral := false
+
 	for pos, char := range input {
 		// update stack
-		if string(char) == "(" && prevChar != "\\" {
+		if string(char) == "`" && prevChar != "\\" {
+			inStringLiteral = !inStringLiteral
+		} else if string(char) == "(" && prevChar != "\\" && !inStringLiteral {
 			bracketStack++
-		} else if string(char) == ")" && prevChar != "\\" {
+		} else if string(char) == ")" && prevChar != "\\" && !inStringLiteral {
 			bracketStack--
 		}
 
 		// grab arguments
-		if bracketStack == 0 && string(char) == "," && prevChar != "\\" {
-			argList = append(argList, input[lastSplitPos:pos])
+		if bracketStack == 0 && string(char) == "," && prevChar != "\\" && !inStringLiteral {
+			argList = append(argList, parseStringLiteral(input[lastSplitPos:pos]))
 			lastSplitPos = pos + 1
 		}
 
 		prevChar = string(char)
 	}
-	argList = append(argList, string(input[lastSplitPos:]))
+	argList = append(argList, parseStringLiteral(input[lastSplitPos:]))
 
 	return argList
 }

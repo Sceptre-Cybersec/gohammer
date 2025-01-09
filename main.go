@@ -218,7 +218,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("-ft\tFilter responses that take longer than or equal to the specified time in miliseconds")
 		log.Println("")
 		log.Println("Error Filter Options:")
-		log.Println("-emc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
+		log.Println("-emc\tThe http response codes to match")
 		log.Println("-ems\tMatch http response by size")
 		log.Println("-emw\tMatch http response by number of words")
 		log.Println("-eml\tMatch http response by number of lines")
@@ -232,7 +232,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("-eft\tFilter responses that take longer than or equal to the specified time in miliseconds")
 		log.Println("")
 		log.Println("Trigger Filter Options:")
-		log.Println("-tmc\tThe http response codes to match [Default:'200,204,301,302,307,401,403,405,500']")
+		log.Println("-tmc\tThe http response codes to match")
 		log.Println("-tms\tMatch http response by size")
 		log.Println("-tmw\tMatch http response by number of words")
 		log.Println("-tml\tMatch http response by number of lines")
@@ -276,7 +276,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("\trandStr([int,[int]]): generates a random string of letters and numbers. Optionally specify an minimum and maximum length. Default is 10, 65")
 		log.Println("\trandInt([int,[int]]): generates a random integer. Optionally specify an minimum and maximum int. Default is 0, MAX_INT64")
 		log.Println("\trandBytes([int,[int]]): generates a random string of bytes. Optionally specify an minimum and maximum length. Default is 10, 1024")
-		log.Println("\tregex(string, string, [int]): runs a regular expression and returns the specified capture group. Note that special characters still need to be escaped.")
+		log.Println("\tregex(string, string, [int]): runs a regular expression and returns the specified capture group. Note that special characters still need to be escaped unless you use a string literal `my-string`.")
 		log.Println("\tprevResponse(int): returns the content of a previous response when using multiple request files. An index of 0 selects the response from the first request file.")
 		log.Println("")
 		log.Println("Example Usage:")
@@ -293,7 +293,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("Transform Usage (HTTP Basic Auth):")
 		log.Println("gohammer -u https://some.site.com/ -H 'Authorization: @t0@' -transform 'b64Encode(@0@:@1@)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 		log.Println("Use CSRF token:")
-		log.Println("gohammer -u https://some.site.com/ -f get-csrf-req.txt -f do-request.txt -transform 'regex(prevResponse(0),x-csrf-token: \\(.*\\),1)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
+		log.Println("gohammer -u https://some.site.com/ -f get-csrf-req.txt -f do-request.txt -transform 'regex(prevResponse(0),`X-Csrf-Token: (.*)`,1)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 	}
 	// Request Options
 	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "http://127.0.0.1/", "")
@@ -381,10 +381,6 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 func loadDefaults(args *config.Args) {
 	if len(args.FilterOptions.Mc) <= 0 {
 		args.FilterOptions.Mc.Set("200,204,301,302,303,307,308,400,401,403,405,500")
-	}
-
-	if len(args.ErrorFilterOptions.Mc) <= 0 {
-		args.ErrorFilterOptions.Mc.Set("504,503")
 	}
 
 	if len(args.RecursionOptions.RecurseCode) <= 0 {

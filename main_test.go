@@ -37,7 +37,8 @@ func reqHandle(w http.ResponseWriter, r *http.Request) {
 	} else if strings.HasPrefix(r.URL.String(), "/csrf") {
 		urlChan <- r.URL.String()
 		w.Header().Set("foo", "bar")
-		fmt.Fprint(w, "csrf-token: blahcsrfblah123")
+		w.Header().Set("csrf-token", "blahcsrfblah123")
+		// fmt.Fprint(w, "csrf-token: blahcsrfblah123")
 	} else {
 		body, err := ioutil.ReadAll(r.Body)
 		if err == nil && strings.HasPrefix(r.URL.String(), "/data") {
@@ -375,7 +376,7 @@ func TestMultiAgentRegexTransformHandling(t *testing.T) {
 	args.RecursionOptions.RecursePosition = 0
 	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
-	args.TransformOptions.Transforms = []string{"regex(prevResponse(0),csrf-token: \\(.*\\),1)"}
+	args.TransformOptions.Transforms = []string{"regex(prevResponse(0  ), `Csrf-Token: (.*)`, 1)"}
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
 	args.WordlistOptions.Extensions = []string{""}
 	args.OutputOptions.Logger = utils.NewLogger(utils.TESTING, buf)
@@ -390,7 +391,7 @@ func TestMultiAgentRegexTransformHandling(t *testing.T) {
 	}
 }
 
-func TestOnError(t *testing.T) {
+func TestOnTrigger(t *testing.T) {
 	buf := new(bytes.Buffer)
 	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/trigger/@0@", "GET", []string{}, "", "", 5)
 	agents := []*request.ReqAgentHttp{agent}
@@ -413,6 +414,6 @@ func TestOnError(t *testing.T) {
 	time.Sleep(time.Duration(0.25 * float64(time.Second)))
 	out, _ := buf.ReadString(byte(0))
 	if !strings.Contains(out, "Executed command output: hello world!") {
-		t.Fatal("OnError command never executed")
+		t.Fatal("OnTrigger command never executed")
 	}
 }
