@@ -147,6 +147,10 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 	if elapsed > args.RequestOptions.Timeout {
 		fmt.Printf("Elapsed: %d    \tTimeout:%d\n", elapsed, args.RequestOptions.Timeout)
 	}
+	if resp == nil {
+		return false, err
+	}
+
 	r := response.NewRespFromHttp(resp, elapsed, err)
 
 	// an error created by 301 without Location header
