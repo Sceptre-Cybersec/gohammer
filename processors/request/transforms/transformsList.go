@@ -3,6 +3,7 @@ package transforms
 import (
 	"crypto/rand"
 	b64 "encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
@@ -19,6 +20,8 @@ func NewTransformList() TransformList {
 	t := TransformList{
 		"b64Encode":    b64Encode,
 		"b64Decode":    b64Decode,
+		"hexEncode":    hexEncode,
+		"hexDecode":    hexDecode,
 		"urlEncode":    urlEncode,
 		"urlDecode":    urlDecode,
 		"concat":       concat,
@@ -186,6 +189,21 @@ func randInt(context TransformContext) string {
 	return number.String()
 }
 
+func hexEncode(context TransformContext) string {
+	input := context.Args
+	return hex.EncodeToString([]byte(input[0]))
+}
+
+func hexDecode(context TransformContext) string {
+	input := context.Args
+	byt, err := hex.DecodeString(input[0])
+	if err != nil {
+		fmt.Printf("Error: cannot decode hex string %s\n", input)
+		return ""
+	}
+	return string(byt)
+}
+
 func b64Encode(context TransformContext) string {
 	input := context.Args
 	return b64.StdEncoding.EncodeToString([]byte(input[0]))
@@ -195,7 +213,7 @@ func b64Decode(context TransformContext) string {
 	input := context.Args
 	output, err := b64.StdEncoding.DecodeString(input[0])
 	if err != nil {
-		fmt.Printf("Error: cannot decode b46 string %s", input)
+		fmt.Printf("Error: cannot decode b46 string %s\n", input)
 		return ""
 	}
 	return string(output)
@@ -210,7 +228,7 @@ func urlDecode(context TransformContext) string {
 	input := context.Args
 	output, err := url.QueryUnescape(input[0])
 	if err != nil {
-		fmt.Printf("Error: cannot decode url string %s", input)
+		fmt.Printf("Error: cannot decode url string %s\n", input)
 		return ""
 	}
 	return string(output)
