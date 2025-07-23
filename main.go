@@ -269,6 +269,8 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("Transform Functions:")
 		log.Println("\tb64Encode(string): takes a single string and returns a base 64 encoding of the string")
 		log.Println("\tb64Decode(string): takes a single base64 encoded string and returns the decoded string")
+		log.Println("\thexEncode(string): takes a single string and returns a hex string representing the bytes in the string")
+		log.Println("\thexDecode(string): takes a single hex string, decodes it and returns the ascii characters as a string")
 		log.Println("\turlEncode(string): takes a single string and encodes unsafe url characters")
 		log.Println("\turlDecode(string): takes a single url encoded string and returns the decoded string")
 		log.Println("\t" + `concat(string, string, string, ...): takes any number of strings and returns all the strings joined together. Note that
