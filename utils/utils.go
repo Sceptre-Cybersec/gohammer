@@ -92,7 +92,7 @@ func SetDif(a, b []int) (diff []int) {
 
 // GetNumJobs computes the number of jobs based on the file length and number of fuzzing positions
 // Returns the total number of jobs
-func GetNumJobs(fnames []string, noBrute bool, extensions []string, log *Logger) int {
+func GetNumJobs(fnames []string, combo bool, extensions []string, log *Logger) int {
 	var files []*bufio.Scanner
 	for _, fname := range fnames {
 		f, err := os.Open(fname)
@@ -111,7 +111,7 @@ func GetNumJobs(fnames []string, noBrute bool, extensions []string, log *Logger)
 			log.Println("Error: empty file")
 			os.Exit(1)
 		}
-		if !noBrute {
+		if !combo {
 			numJobs *= len
 		} else {
 			numJobs = int(math.Min(float64(numJobs), float64(len)))

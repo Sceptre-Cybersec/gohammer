@@ -73,7 +73,7 @@ func TestSendReq(t *testing.T) {
 	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
-	args.WordlistOptions.NoBrute = true
+	args.WordlistOptions.Combo = true
 	args.WordlistOptions.Extensions = []string{""}
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	go sendReq(reqChan, agents, counter, &args)
@@ -106,7 +106,7 @@ func TestBrute(t *testing.T) {
 	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
-	args.WordlistOptions.NoBrute = true
+	args.WordlistOptions.Combo = true
 	args.WordlistOptions.Extensions = []string{""}
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	go sendReq(reqChan, agents, counter, &args)
@@ -147,7 +147,7 @@ func TestExtensions(t *testing.T) {
 
 	var args config.Args
 	args.WordlistOptions.Files = []string{"tests/a.txt", "tests/b.txt"}
-	args.WordlistOptions.NoBrute = true
+	args.WordlistOptions.Combo = true
 	args.WordlistOptions.Extensions = []string{".txt", ".php"}
 	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
 	procFiles(nil, reqChan, &args, 0)
@@ -205,7 +205,7 @@ func TestRecursion(t *testing.T) {
 	args.RecursionOptions.RecurseDelimiter = "/"
 	args.GeneralOptions.Retry = 0
 	args.WordlistOptions.Files = []string{"tests/oneChar.txt"}
-	args.WordlistOptions.NoBrute = false
+	args.WordlistOptions.Combo = false
 	args.GeneralOptions.Threads = 1
 	args.WordlistOptions.Extensions = []string{""}
 	args.RecursionOptions.Depth = 3
@@ -237,7 +237,7 @@ func TestFileToReq(t *testing.T) {
 	}
 	reqFileContent := string(fileBytes)
 
-	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5, []string{})
+	agent := request.FileToRequestAgent(reqFileContent, "", true, "", 5, []string{})
 	if agent.GetUrl() != "http://127.0.0.1:8888/data/@0@" || len(agent.GetHeaders()) != 16 || agent.GetMethod() != "POST" || agent.GetBody() != "test=hello@0@" {
 		fmt.Printf("URL: {%s}\n", agent.GetUrl())
 		fmt.Printf("Headers: {%d}\n", len(agent.GetHeaders()))
@@ -256,7 +256,7 @@ func TestFilePost(t *testing.T) {
 	}
 	reqFileContent := utils.RemoveTrailingNewline(string(fileBytes))
 
-	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", "", 5, []string{})
+	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", true, "", 5, []string{})
 	agents := []*request.ReqAgentHttp{agent}
 	reqChan := make(chan []string)
 	counter := utils.NewCounter()

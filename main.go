@@ -75,7 +75,7 @@ func procExtensions(currString []string, extensions []string, reqChan chan []str
 // procFiles opens user supplied wordlists and adds words from each wordlist to user specified positions
 func procFiles(currString []string, reqChan chan []string, args *config.Args, index int) {
 	fnames := args.WordlistOptions.Files[index:]
-	if !args.WordlistOptions.NoBrute { //use recursive strategy
+	if !args.WordlistOptions.Combo { //use recursive strategy
 		//send string to channel
 		if len(fnames) <= 0 {
 			procExtensions(currString, args.WordlistOptions.Extensions, reqChan, args.RequestOptions.Rate)
@@ -191,6 +191,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("-method\tThe type of http request: Usually GET, or POST [Default:'GET']")
 		log.Println("-proxy\tThe proxy to send the requests through: Example http://127.0.0.1:8080 [Default: no proxy]")
 		log.Println("-rate\tThe rate limit to apply to the requests in req/s [Default: no limit]")
+		log.Println("-http\tUse unencrypted http instead of https when the scheme isn't specified, such as in a request file [Default: false]")
 		log.Println("")
 		log.Println("General Options:")
 		log.Println("-t\tThe number of concurrent threads [Default:10]")
@@ -253,7 +254,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("-capture-file\tThe file to save the captured data [Default: 'cap.txt']")
 		log.Println("")
 		log.Println("Wordlist Options:")
-		log.Println("-brute\tWhether or not to use wordlists for brute forcing. If false, runs through all wordlists line by line. [Default:true]")
+		log.Println("-combo\tWhether or not to use wordlists as a combo list. If true, runs through all wordlists line by line instead of cartesian product. [Default:false]")
 		log.Println("-e\tThe comma separated file extensions to fuzz with. Example: '.txt,.php,.html'")
 		log.Println("")
 		log.Println("Transforms: Transforms are a versitile tool that allows you to use functions to mutate your wordlists on the fly")
@@ -298,7 +299,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("gohammer -u https://some.site.com/ -f get-csrf-req.txt -f do-request.txt -transform 'regex(prevResponse(0),`X-Csrf-Token: (.*)`,1)' -t 32 /home/me/usernames.txt /home/me/passwords.txt")
 	}
 	// Request Options
-	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "http://127.0.0.1/", "")
+	flag.StringVar(&(progArgs.RequestOptions.Url), "u", "", "")
 	flag.StringVar(&(progArgs.RequestOptions.Data), "d", "", "")
 	flag.StringVar(&(progArgs.RequestOptions.Proxy), "proxy", "", "")
 	flag.Float64Var(&(progArgs.RequestOptions.Rate), "rate", 0, "")
@@ -307,6 +308,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 	flag.IntVar(&(progArgs.RequestOptions.Timeout), "to", 15, "")
 	flag.Var(&(progArgs.RequestOptions.Headers), "H", "")
 	flag.Var(&(progArgs.RequestOptions.RemoveHeaders), "rH", "")
+	flag.BoolVar(&(progArgs.RequestOptions.Http), "http", false, "")
 
 	// General Options
 	flag.IntVar(&(progArgs.GeneralOptions.Threads), "t", 10, "")
@@ -320,7 +322,7 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 	flag.Var(&(progArgs.RecursionOptions.RecurseCode), "rc", "")
 
 	// Wordlist Options
-	flag.BoolVar(&(progArgs.WordlistOptions.NoBrute), "no-brute", false, "")
+	flag.BoolVar(&(progArgs.WordlistOptions.Combo), "combo", false, "")
 	flag.Var(&(progArgs.WordlistOptions.Extensions), "e", "")
 
 	// Filter Options
@@ -436,14 +438,14 @@ func main() {
 	args.WordlistOptions.Extensions = append(args.WordlistOptions.Extensions, "")
 
 	if !args.GeneralOptions.Dos {
-		utils.TotalJobs = utils.GetNumJobs(args.WordlistOptions.Files, args.WordlistOptions.NoBrute, args.WordlistOptions.Extensions, log)
+		utils.TotalJobs = utils.GetNumJobs(args.WordlistOptions.Files, args.WordlistOptions.Combo, args.WordlistOptions.Extensions, log)
 	}
 
 	var agents []*request.ReqAgentHttp
 	if len(reqFileContents) > 0 { // initialize as http agent
 		args.RequestOptions.Url = strings.TrimSuffix(args.RequestOptions.Url, "/")
 		for _, reqFileContent := range reqFileContents {
-			agent := request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.RemoveHeaders)
+			agent := request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Http, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.RemoveHeaders)
 			agents = append(agents, agent)
 		}
 
