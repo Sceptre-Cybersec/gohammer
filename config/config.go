@@ -93,6 +93,7 @@ type RequestOptions struct {
 	RemoveHeaders multiStringFlag
 	Timeout       int
 	Data          string
+	Http          bool
 }
 
 type GeneralOptions struct {
@@ -109,7 +110,7 @@ type RecursionOptions struct {
 }
 
 type WordlistOptions struct {
-	NoBrute    bool
+	Combo      bool
 	Extensions multiSplitStringFlag
 	Files      []string
 }

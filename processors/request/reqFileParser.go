@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout int, removeHeaders []string) *ReqAgentHttp {
+func FileToRequestAgent(reqContent string, urlBase string, useHttp bool, proxy string, timeout int, removeHeaders []string) *ReqAgentHttp {
 	getMethod := regexp.MustCompile(`\S+`)
 	method := getMethod.FindString(reqContent)
 
@@ -20,10 +20,17 @@ func FileToRequestAgent(reqContent string, urlBase string, proxy string, timeout
 	if urlBase == "" {
 		getHostName := regexp.MustCompile(`(?:h|H)ost:\s(\S+)`)
 		hostGroups := getHostName.FindStringSubmatch(reqContent)
-		if len(hostGroups) <= 1 {
+		if len(hostGroups) < 2 {
 			fmt.Println("Error parsing host from request file")
 			os.Exit(1)
 		}
+		if useHttp {
+			urlBase = "http://"
+		} else {
+			urlBase = "https://"
+		}
+
+		urlBase += hostGroups[1]
 	}
 	path := urlBase + pathGroups[1]
 
