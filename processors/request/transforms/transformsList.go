@@ -82,8 +82,11 @@ func prevResponse(context TransformContext) string {
 		fmt.Printf("Error: could not convert %s to int (%s)", input[0], err.Error())
 		return ""
 	}
-	rsp := responses[rspIdx]
-	return rsp.ToString()
+	rsp := ""
+	if len(responses) > rspIdx {
+		rsp = responses[rspIdx].ToString()
+	}
+	return rsp
 }
 
 func regex(context TransformContext) string {
