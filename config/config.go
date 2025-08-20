@@ -94,6 +94,8 @@ type RequestOptions struct {
 	Timeout       int
 	Data          string
 	Http          bool
+	Esc           bool
+	NoUpdateCL    bool
 }
 
 type GeneralOptions struct {

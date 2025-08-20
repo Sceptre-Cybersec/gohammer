@@ -43,7 +43,18 @@ func NewReqTemplate(reqUrl string, method string, headers []string, body string)
 	}
 }
 
-func NewReqAgentHttp(reqUrl string, method string, headers []string, body string, proxy string, timeout int) *ReqAgentHttp {
+func NewReqAgentHttp(reqUrl string, method string, headers []string, body string, proxy string, timeout int, esc bool) *ReqAgentHttp {
+	if esc {
+		escapedHeaders := []string{}
+		for _, h := range headers {
+			escapedHeaders = append(escapedHeaders, utils.ApplyEscapeCharacters(h))
+		}
+		headers = escapedHeaders
+		body = utils.ApplyEscapeCharacters(body)
+		reqUrl = utils.ApplyEscapeCharacters(reqUrl)
+		//idk if you'll ever need to have escape chars in the method but who knows what you crazy kids get up to :)
+		method = utils.ApplyEscapeCharacters(method)
+	}
 	template := NewReqTemplate(reqUrl, method, headers, body)
 	client := &http.Client{
 		Timeout:       time.Duration(timeout * int(time.Second)),
@@ -125,11 +136,11 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 	//add headers
 	headers := procReq.headers
 	for _, header := range headers {
-		splitHeaders := strings.Split(header, ": ")
+		splitHeaders := strings.SplitN(header, ": ", 2)
 		if len(splitHeaders) >= 2 {
 			if strings.EqualFold(splitHeaders[0], "Host") {
 				reqTemplate.Host = splitHeaders[1]
-			} else if strings.EqualFold(splitHeaders[0], "Content-Length") {
+			} else if strings.EqualFold(splitHeaders[0], "Content-Length") && !args.RequestOptions.NoUpdateCL {
 				// adjust content length
 				reqTemplate.Header.Set(splitHeaders[0], strconv.Itoa(len(procReq.body)))
 			} else {
@@ -168,6 +179,14 @@ func (req *ReqAgentHttp) Send(positions []string, counter *utils.Counter, args *
 // ProcReqTemplate applies words from a set of wordlists to a request template
 // Returns the parsed request template
 func procReqTemplate(reqAgent *ReqAgentHttp, positions []string, args *config.Args, previousResponses *[]response.Resp) *ReqTemplate {
+	// apply escape characters to the words coming from the wordlist, it's already been done for the request body
+	if args.RequestOptions.Esc {
+		escapedPositions := []string{}
+		for _, p := range positions {
+			escapedPositions = append(escapedPositions, utils.ApplyEscapeCharacters(p))
+		}
+		positions = escapedPositions
+	}
 	url := utils.ReplacePosition(reqAgent.GetUrl(), positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger)
 	method := utils.ReplacePosition(reqAgent.GetMethod(), positions, args.RecursionOptions.RecursePosition, args.OutputOptions.Logger)
 	var headers []string

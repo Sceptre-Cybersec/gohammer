@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func FileToRequestAgent(reqContent string, urlBase string, useHttp bool, proxy string, timeout int, removeHeaders []string) *ReqAgentHttp {
+func FileToRequestAgent(reqContent string, urlBase string, useHttp bool, proxy string, timeout int, removeHeaders []string, respectEscapeChars bool) *ReqAgentHttp {
 	getMethod := regexp.MustCompile(`\S+`)
 	method := getMethod.FindString(reqContent)
 
@@ -48,13 +48,12 @@ func FileToRequestAgent(reqContent string, urlBase string, useHttp bool, proxy s
 	// remove the body content
 	parsedReqFile := getContent.ReplaceAllString(reqContent, "")
 
-	getHeaders := regexp.MustCompile(`[\w-]+:\s.*`)
+	getHeaders := regexp.MustCompile(`[\\\w-]+:\s.*`)
 	headersArr := getHeaders.FindAllString(parsedReqFile, -1)
 	// remove newlines from headers
 	var cleanedHeaders []string
 	stripNL := regexp.MustCompile(`\r|\n`)
 	for _, header := range headersArr {
-
 		//skip headers if they're in the removal list
 		cleanHeader := stripNL.ReplaceAllString(header, "")
 		skip := false
@@ -68,7 +67,7 @@ func FileToRequestAgent(reqContent string, urlBase string, useHttp bool, proxy s
 			cleanedHeaders = append(cleanedHeaders, cleanHeader)
 		}
 	}
-	req := NewReqAgentHttp(path, method, cleanedHeaders, body, proxy, timeout)
+	req := NewReqAgentHttp(path, method, cleanedHeaders, body, proxy, timeout, respectEscapeChars)
 
 	return req
 

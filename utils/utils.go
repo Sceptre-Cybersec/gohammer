@@ -2,6 +2,8 @@ package utils
 
 import (
 	"bufio"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -17,6 +19,62 @@ var FrontierLock sync.Mutex // this lock it used to ensure the FrontierQ doesn't
 var ReqLock sync.RWMutex    // this lock is used to pause the sending of requests
 
 var TotalJobs int
+
+func charMap(str string) (string, error) {
+	chars := map[string]string{
+		"n": "0a",
+		"t": "09",
+		"r": "0d",
+		"f": "0c",
+		"b": "08",
+	}
+	char := ""
+	if len(str) == 1 {
+		ch, ok := chars[str]
+		if !ok {
+			return "", errors.New("invalid escape character: " + str)
+		}
+		char = ch
+	} else {
+		char = str
+	}
+
+	strBytes, err := hex.DecodeString(char)
+	if err != nil {
+		return "", err
+	}
+
+	return string(strBytes), nil
+}
+
+func applyEscapeCharactersBySegment(str string) string {
+	// match things like \x00 and \n \t etc
+	re := regexp.MustCompile(`(?m)\\x([0-9a-f][0-9a-f])|\\([ntrfb])`)
+
+	for _, match := range re.FindAllStringSubmatch(str, -1) {
+		char := match[1]
+		if char == "" {
+			char = match[2]
+		}
+		replacementChar, err := charMap(char)
+		if err == nil {
+			str = strings.Replace(str, match[0], replacementChar, 1)
+		}
+	}
+
+	return str
+}
+
+func ApplyEscapeCharacters(str string) string {
+	// temporarily remove "\\" since it would interfere with parsing characters like \n or \x00
+	segments := strings.Split(str, "\\\\")
+	parsedSegments := []string{}
+	for _, segment := range segments {
+		parsedSegments = append(parsedSegments, applyEscapeCharactersBySegment(segment))
+	}
+	str = strings.Join(parsedSegments, "\\")
+	return str
+}
 
 // replacePosition scans a string for the position marker and replaces it with a word
 // from the corresponding wordlist

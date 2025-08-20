@@ -63,7 +63,7 @@ func TestSetup(t *testing.T) {
 
 func TestSendReq(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/headers/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/headers/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -96,7 +96,7 @@ func TestSendReq(t *testing.T) {
 
 func TestBrute(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@@1@", "POST", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -131,7 +131,7 @@ func TestBrute(t *testing.T) {
 
 func TestExtensions(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@_@1@", "GET", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@_@1@", "GET", []string{"Content-Type: @0@", "Host: @0@@1@"}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	for i := 0; i < 4; i++ {
@@ -171,7 +171,7 @@ func TestExtensions(t *testing.T) {
 
 func TestPostData(t *testing.T) {
 	reqChan := make(chan []string)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/data", "POST", []string{}, "test=hello@0@", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/data", "POST", []string{}, "test=hello@0@", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -195,7 +195,7 @@ func TestPostData(t *testing.T) {
 }
 
 func TestRecursion(t *testing.T) {
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/recurse/@0@", "GET", []string{}, "", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/recurse/@0@", "GET", []string{}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -237,7 +237,7 @@ func TestFileToReq(t *testing.T) {
 	}
 	reqFileContent := string(fileBytes)
 
-	agent := request.FileToRequestAgent(reqFileContent, "", true, "", 5, []string{})
+	agent := request.FileToRequestAgent(reqFileContent, "", true, "", 5, []string{}, false)
 	if agent.GetUrl() != "http://127.0.0.1:8888/data/@0@" || len(agent.GetHeaders()) != 16 || agent.GetMethod() != "POST" || agent.GetBody() != "test=hello@0@" {
 		fmt.Printf("URL: {%s}\n", agent.GetUrl())
 		fmt.Printf("Headers: {%d}\n", len(agent.GetHeaders()))
@@ -256,7 +256,7 @@ func TestFilePost(t *testing.T) {
 	}
 	reqFileContent := utils.RemoveTrailingNewline(string(fileBytes))
 
-	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", true, "", 5, []string{})
+	agent := request.FileToRequestAgent(reqFileContent, "http://127.0.0.1:8888", true, "", 5, []string{}, false)
 	agents := []*request.ReqAgentHttp{agent}
 	reqChan := make(chan []string)
 	counter := utils.NewCounter()
@@ -290,7 +290,7 @@ func TestTransforms(t *testing.T) {
 }
 
 func TestTransformRequests(t *testing.T) {
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@t0@", "GET", []string{}, "", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/@t0@", "GET", []string{}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -315,7 +315,7 @@ func TestTransformRequests(t *testing.T) {
 
 func TestMCAll(t *testing.T) {
 	buf := new(bytes.Buffer)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/allCodes/@0@", "GET", []string{}, "", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/allCodes/@0@", "GET", []string{}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -340,8 +340,8 @@ func TestMCAll(t *testing.T) {
 
 func TestMultiAgentHandling(t *testing.T) {
 	buf := new(bytes.Buffer)
-	agent1 := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@", "GET", []string{}, "", "", 5)
-	agent2 := request.NewReqAgentHttp("http://127.0.0.1:8888/foo/@0@", "GET", []string{}, "", "", 5)
+	agent1 := request.NewReqAgentHttp("http://127.0.0.1:8888/@0@", "GET", []string{}, "", "", 5, false)
+	agent2 := request.NewReqAgentHttp("http://127.0.0.1:8888/foo/@0@", "GET", []string{}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent1, agent2}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -366,8 +366,8 @@ func TestMultiAgentHandling(t *testing.T) {
 
 func TestMultiAgentRegexTransformHandling(t *testing.T) {
 	buf := new(bytes.Buffer)
-	agent1 := request.NewReqAgentHttp("http://127.0.0.1:8888/csrf/@0@", "GET", []string{}, "", "", 5)
-	agent2 := request.NewReqAgentHttp("http://127.0.0.1:8888/foo/@0@/@t0@", "GET", []string{}, "", "", 5)
+	agent1 := request.NewReqAgentHttp("http://127.0.0.1:8888/csrf/@0@", "GET", []string{}, "", "", 5, false)
+	agent2 := request.NewReqAgentHttp("http://127.0.0.1:8888/foo/@0@/@t0@", "GET", []string{}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent1, agent2}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -393,7 +393,7 @@ func TestMultiAgentRegexTransformHandling(t *testing.T) {
 
 func TestOnTrigger(t *testing.T) {
 	buf := new(bytes.Buffer)
-	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/trigger/@0@", "GET", []string{}, "", "", 5)
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/trigger/@0@", "GET", []string{}, "", "", 5, false)
 	agents := []*request.ReqAgentHttp{agent}
 	counter := utils.NewCounter()
 	var args config.Args
@@ -415,5 +415,29 @@ func TestOnTrigger(t *testing.T) {
 	out, _ := buf.ReadString(byte(0))
 	if !strings.Contains(out, "Executed command output: hello world!") {
 		t.Fatal("OnTrigger command never executed")
+	}
+}
+
+func TestEscapeChars(t *testing.T) {
+	agent := request.NewReqAgentHttp("http://127.0.0.1:8888/\\x41@0@", "GET", []string{}, "", "", 5, true)
+	agents := []*request.ReqAgentHttp{agent}
+	counter := utils.NewCounter()
+	var args config.Args
+	args.RequestOptions.Timeout = 10 * int(time.Second)
+	args.FilterOptions.Mc = []int{200}
+	args.RecursionOptions.RecursePosition = 0
+	args.RecursionOptions.RecurseDelimiter = "/"
+	args.RequestOptions.Esc = true
+	args.GeneralOptions.Retry = 0
+	args.WordlistOptions.Files = []string{"tests/oneCharEsc.txt"}
+	args.WordlistOptions.Extensions = []string{""}
+	args.OutputOptions.Logger = utils.NewLogger(utils.NONE, os.Stdout)
+	reqChan := make(chan []string)
+	go sendReq(reqChan, agents, counter, &args)
+	procFiles(nil, reqChan, &args, 0)
+	close(reqChan)
+	resp := <-urlChan
+	if resp != "/AA" {
+		t.Fatal("Unexpected Escape Character output" + resp)
 	}
 }

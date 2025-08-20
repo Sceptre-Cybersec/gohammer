@@ -192,6 +192,8 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 		log.Println("-proxy\tThe proxy to send the requests through: Example http://127.0.0.1:8080 [Default: no proxy]")
 		log.Println("-rate\tThe rate limit to apply to the requests in req/s [Default: no limit]")
 		log.Println("-http\tUse unencrypted http instead of https when the scheme isn't specified, such as in a request file [Default: false]")
+		log.Println("-esc\tRecognize and apply escape characters like \\r\\n \\x00 \\x0a, etc [Default: false]")
+		log.Println("-no-update-cl\tDon't update the content length header automatically [Default: false]")
 		log.Println("")
 		log.Println("General Options:")
 		log.Println("-t\tThe number of concurrent threads [Default:10]")
@@ -309,6 +311,8 @@ func parseArgs(_ []string, log *utils.Logger) *config.Args {
 	flag.Var(&(progArgs.RequestOptions.Headers), "H", "")
 	flag.Var(&(progArgs.RequestOptions.RemoveHeaders), "rH", "")
 	flag.BoolVar(&(progArgs.RequestOptions.Http), "http", false, "")
+	flag.BoolVar(&(progArgs.RequestOptions.Esc), "esc", false, "")
+	flag.BoolVar(&(progArgs.RequestOptions.NoUpdateCL), "no-update-cl", true, "")
 
 	// General Options
 	flag.IntVar(&(progArgs.GeneralOptions.Threads), "t", 10, "")
@@ -445,12 +449,12 @@ func main() {
 	if len(reqFileContents) > 0 { // initialize as http agent
 		args.RequestOptions.Url = strings.TrimSuffix(args.RequestOptions.Url, "/")
 		for _, reqFileContent := range reqFileContents {
-			agent := request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Http, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.RemoveHeaders)
+			agent := request.FileToRequestAgent(reqFileContent, args.RequestOptions.Url, args.RequestOptions.Http, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.RemoveHeaders, args.RequestOptions.Esc)
 			agents = append(agents, agent)
 		}
 
 	} else {
-		agent := request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy, args.RequestOptions.Timeout)
+		agent := request.NewReqAgentHttp(args.RequestOptions.Url, args.RequestOptions.Method, args.RequestOptions.Headers, args.RequestOptions.Data, args.RequestOptions.Proxy, args.RequestOptions.Timeout, args.RequestOptions.Esc)
 		agents = append(agents, agent)
 	}
 
