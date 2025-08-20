@@ -142,7 +142,8 @@ func (resp *Resp) ProcessResp(positions []string, counter *utils.Counter, args *
 		cap.ApplyCapture()
 	}
 
-	if len(utils.FrontierQ) > 0 && resp.IsRecurse(args.RecursionOptions.RecurseCode) {
+	if len(utils.FrontierQ) > 0 && len(positions) > args.RecursionOptions.RecursePosition && resp.IsRecurse(args.RecursionOptions.RecurseCode) {
+		fmt.Println(positions)
 		utils.FrontierLock.Lock()
 		// add current position to base string of Frontier[0] and add it to the frontier
 		utils.FrontierQ = append(utils.FrontierQ, append(utils.FrontierQ[0], positions[args.RecursionOptions.RecursePosition]+args.RecursionOptions.RecurseDelimiter))
